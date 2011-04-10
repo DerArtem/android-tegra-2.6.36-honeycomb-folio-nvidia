@@ -255,3 +255,10 @@ config CMDLINE_PARTITION
        help
 	 Say Y here if you would like to pass the partition table for a device
 	 on the kernel command line.
+
+config TEGRAPART_PARTITION
+        bool "tegrapart cmdline partition table support" if PARTITION_ADVANCED
+        default y
+        help
+	  Pass partition table via cmdline
+	  Add support for extended tegrapart= cmdline
