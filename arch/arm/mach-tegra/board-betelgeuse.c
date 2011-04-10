@@ -40,7 +40,6 @@
 #include <mach/i2s.h>
 #include <mach/iomap.h>
 #include <mach/irqs.h>
-#include <mach/nand.h>
 #include <mach/clk.h>
 #include <mach/usb_phy.h>
 #include <mach/suspend.h>
@@ -125,69 +124,6 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata = {
 	.phy_config = &utmi_phy_config,
 	.operating_mode = TEGRA_USB_HOST,
 	.power_down_on_bus_suspend = 1,
-};
-
-static struct tegra_nand_chip_parms nand_chip_parms[] = {
-	/* Samsung K5E2G1GACM */
-	[0] = {
-		.vendor_id   = 0xEC,
-		.device_id   = 0xAA,
-		.capacity    = 256,
-		.timing      = {
-			.trp		= 21,
-			.trh		= 15,
-			.twp		= 21,
-			.twh		= 15,
-			.tcs		= 31,
-			.twhr		= 60,
-			.tcr_tar_trr	= 20,
-			.twb		= 100,
-			.trp_resp	= 30,
-			.tadl		= 100,
-		},
-	},
-	/* Hynix H5PS1GB3EFR */
-	[1] = {
-		.vendor_id   = 0xAD,
-		.device_id   = 0xDC,
-		.capacity    = 512,
-		.timing      = {
-			.trp		= 12,
-			.trh		= 10,
-			.twp		= 12,
-			.twh		= 10,
-			.tcs		= 20,
-			.twhr		= 80,
-			.tcr_tar_trr	= 20,
-			.twb		= 100,
-			.trp_resp	= 20,
-			.tadl		= 70,
-		},
-	},
-};
-
-struct tegra_nand_platform betelgeuse_nand_data = {
-	.max_chips	= 8,
-	.chip_parms	= nand_chip_parms,
-	.nr_chip_parms  = ARRAY_SIZE(nand_chip_parms),
-};
-
-static struct resource resources_nand[] = {
-	[0] = {
-		.start  = INT_NANDFLASH,
-		.end    = INT_NANDFLASH,
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device tegra_nand_device = {
-	.name           = "tegra_nand",
-	.id             = -1,
-	.num_resources  = ARRAY_SIZE(resources_nand),
-	.resource       = resources_nand,
-	.dev            = {
-		.platform_data = &betelgeuse_nand_data,
-	},
 };
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
@@ -299,7 +235,6 @@ static struct platform_device *betelgeuse_devices[] __initdata = {
 	&androidusb_device,
 	&debug_uart,
 	&pmu_device,
-	&tegra_nand_device,
 	&tegra_udc_device,
 	&pda_power_device,
 	&tegra_ehci3_device,
