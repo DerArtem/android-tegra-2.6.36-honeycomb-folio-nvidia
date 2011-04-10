@@ -29,6 +29,7 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/platform_data/tegra_usb.h>
+#include <linux/usb/android_composite.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -60,6 +61,43 @@
 #define ATAG_NVIDIA_PRESERVED_MEM_0	0x10000
 #define ATAG_NVIDIA_PRESERVED_MEM_N	2
 #define ATAG_NVIDIA_FORCE_32		0x7fffffff
+
+static char *usb_functions[] = { "mtp" };
+static char *usb_functions_adb[] = { "mtp", "adb" };
+
+static struct android_usb_product usb_products[] = {
+        {
+                .product_id     = 0x7102,
+                .num_functions  = ARRAY_SIZE(usb_functions),
+                .functions      = usb_functions,
+        },
+        {
+                .product_id     = 0x7100,
+                .num_functions  = ARRAY_SIZE(usb_functions_adb),
+                .functions      = usb_functions_adb,
+        },
+};
+
+/* standard android USB platform data */
+static struct android_usb_platform_data andusb_plat = {
+        .vendor_id              = 0x0955,
+        .product_id             = 0x7100,
+        .manufacturer_name      = "Toshiba",
+        .product_name           = "Folio 100",
+        .serial_number          = NULL,
+        .num_products = ARRAY_SIZE(usb_products),
+        .products = usb_products,
+        .num_functions = ARRAY_SIZE(usb_functions_adb),
+        .functions = usb_functions_adb,
+};
+
+static struct platform_device androidusb_device = {
+        .name   = "android_usb",
+        .id     = -1,
+        .dev    = {
+                .platform_data  = &andusb_plat,
+        },
+};
 
 struct tag_tegra {
 	__u32 bootarg_key;
@@ -258,6 +296,7 @@ static void betelgeuse_i2c_init(void)
 }
 
 static struct platform_device *betelgeuse_devices[] __initdata = {
+	&androidusb_device,
 	&debug_uart,
 	&pmu_device,
 	&tegra_nand_device,
