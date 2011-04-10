@@ -37,6 +37,11 @@ config MACH_WHISTLER
        help
          Support for NVIDIA Whistler development platform
 
+config MACH_BETELGEUSE
+       bool "Betelgeuse board (Toshiba Folio 100)"
+       help
+         Support for Tosbiba Folio 100
+
 choice
         prompt "Low-level debug console UART"
         default TEGRA_DEBUG_UART_NONE
