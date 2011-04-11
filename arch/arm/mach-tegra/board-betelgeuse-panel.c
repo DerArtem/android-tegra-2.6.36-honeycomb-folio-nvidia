@@ -127,17 +127,17 @@ static struct resource betelgeuse_disp1_resources[] = {
 
 static struct tegra_dc_mode betelgeuse_panel_modes[] = {
 	{
-		.pclk = 42430000,
-		.h_ref_to_sync = 4,
-		.v_ref_to_sync = 2,
-		.h_sync_width = 136,
-		.v_sync_width = 4,
-		.h_back_porch = 138,
-		.v_back_porch = 21,
+		.pclk = 62200000,
+		.h_ref_to_sync = 11,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 26,
+		.v_sync_width = 6,
+		.h_back_porch = 12,
+		.v_back_porch = 3,
 		.h_active = 1024,
 		.v_active = 600,
-		.h_front_porch = 34,
-		.v_front_porch = 4,
+		.h_front_porch = 45,
+		.v_front_porch = 3,
 	},
 };
 
