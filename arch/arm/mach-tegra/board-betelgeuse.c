@@ -376,6 +376,7 @@ static void __init tegra_betelgeuse_init(void)
 	betelgeuse_panel_init();
 	betelgeuse_sdhci_init();
 	betelgeuse_i2c_init();
+	betelgeuse_power_init();
 }
 
 MACHINE_START(HARMONY, "harmony")

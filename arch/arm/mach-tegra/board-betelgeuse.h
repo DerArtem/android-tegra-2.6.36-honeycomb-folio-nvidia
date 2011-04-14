@@ -19,6 +19,7 @@
 #define _MACH_TEGRA_BOARD_BETELGEUSE_H
 
 void betelgeuse_pinmux_init(void);
+int betelgeuse_power_init(void);
 int betelgeuse_panel_init(void);
 int betelgeuse_sdhci_init(void);
 
