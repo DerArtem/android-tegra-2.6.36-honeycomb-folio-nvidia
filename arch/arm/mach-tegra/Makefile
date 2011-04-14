@@ -83,4 +83,5 @@ obj-${CONFIG_MACH_WHISTLER}             += board-whistler-memory.o
 obj-${CONFIG_MACH_BETELGEUSE}           += board-betelgeuse.o
 obj-${CONFIG_MACH_BETELGEUSE}           += board-betelgeuse-pinmux.o
 obj-${CONFIG_MACH_BETELGEUSE}           += board-betelgeuse-panel.o
+obj-${CONFIG_MACH_BETELGEUSE}		+= board-betelgeuse-power.o
 obj-${CONFIG_MACH_BETELGEUSE}           += board-betelgeuse-sdhci.o
