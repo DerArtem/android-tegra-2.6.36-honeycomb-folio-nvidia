@@ -2138,6 +2138,7 @@ struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("cop", "tegra-avp", "cop"),
 	CLK_DUPLICATE("vde", "tegra-aes", "vde"),
 	CLK_DUPLICATE("sbc1", "tegra_spi_slave.0", NULL),
+	CLK_DUPLICATE("bsea", "tegra-aes", "bsea"),
 };
 
 #define CLK(dev, con, ck)	\
@@ -2206,6 +2207,8 @@ static struct tegra_sku_rate_limit sku_limits[] =
 	RATE_LIMIT("avp.sclk",	240000000, 0x04, 0x7, 0x08, 0x0F, 0x10),
 	RATE_LIMIT("vde",	240000000, 0x04, 0x7, 0x08, 0x0F, 0x10),
 	RATE_LIMIT("3d",	300000000, 0x04, 0x7, 0x08, 0x0F, 0x10),
+
+	RATE_LIMIT("host1x",	108000000, 0x0F),
 
 	RATE_LIMIT("sclk",	300000000, 0x14, 0x17, 0x18, 0x1B, 0x1C),
 	RATE_LIMIT("hclk",	300000000, 0x14, 0x17, 0x18, 0x1B, 0x1C),

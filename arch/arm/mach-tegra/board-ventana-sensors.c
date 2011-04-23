@@ -32,6 +32,7 @@
 
 #include <media/ov5650.h>
 #include <media/ov2710.h>
+#include <media/ssl3250a.h>
 #include <generated/mach-types.h>
 
 #include "gpio-names.h"
@@ -42,8 +43,14 @@
 #define AKM8975_IRQ_GPIO	TEGRA_GPIO_PN5
 #define CAMERA_POWER_GPIO	TEGRA_GPIO_PV4
 #define CAMERA_CSI_MUX_SEL_GPIO	TEGRA_GPIO_PBB4
+#define CAMERA_FLASH_ACT_GPIO	TEGRA_GPIO_PD2
+#define CAMERA_FLASH_STRB_GPIO	TEGRA_GPIO_PA0
 #define AC_PRESENT_GPIO		TEGRA_GPIO_PV3
 #define NCT1008_THERM2_GPIO	TEGRA_GPIO_PN6
+#define CAMERA_FLASH_OP_MODE		0 /*0=I2C mode, 1=GPIO mode*/
+#define CAMERA_FLASH_MAX_LED_AMP	7
+#define CAMERA_FLASH_MAX_TORCH_AMP	11
+#define CAMERA_FLASH_MAX_FLASH_AMP	31
 
 extern void tegra_throttling_enable(bool enable);
 
@@ -62,20 +69,21 @@ static int ventana_camera_init(void)
 	return 0;
 }
 
-static int ventana_ov5650_power_on(void)
+/* left ov5650 is CAM2 which is on csi_a */
+static int ventana_left_ov5650_power_on(void)
 {
 	gpio_direction_output(CAMERA_CSI_MUX_SEL_GPIO, 0);
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 1);
 	gpio_direction_output(CAM2_PWR_DN_GPIO, 0);
-	msleep(5);
+	mdelay(5);
 	gpio_direction_output(CAM2_RST_L_GPIO, 0);
-	msleep(1);
+	mdelay(1);
 	gpio_direction_output(CAM2_RST_L_GPIO, 1);
-	msleep(20);
+	mdelay(20);
 	return 0;
 }
 
-static int ventana_ov5650_power_off(void)
+static int ventana_left_ov5650_power_off(void)
 {
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 0);
 	gpio_direction_output(CAM2_RST_L_GPIO, 0);
@@ -83,37 +91,38 @@ static int ventana_ov5650_power_off(void)
 	return 0;
 }
 
-struct ov5650_platform_data ventana_ov5650_data = {
-	.power_on = ventana_ov5650_power_on,
-	.power_off = ventana_ov5650_power_off,
+struct ov5650_platform_data ventana_left_ov5650_data = {
+	.power_on = ventana_left_ov5650_power_on,
+	.power_off = ventana_left_ov5650_power_off,
 };
 
-static int ventana_ov5650s_power_on(void)
+/* right ov5650 is CAM1 which is on csi_b */
+static int ventana_right_ov5650_power_on(void)
 {
-	ventana_ov5650_power_on();
+	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 1);
 	gpio_direction_output(CAM1_LDO_SHUTDN_L_GPIO, 1);
-	msleep(5);
+	mdelay(5);
 	gpio_direction_output(CAM1_PWR_DN_GPIO, 0);
-	msleep(5);
+	mdelay(5);
 	gpio_direction_output(CAM1_RST_L_GPIO, 0);
-	msleep(1);
+	mdelay(1);
 	gpio_direction_output(CAM1_RST_L_GPIO, 1);
-	msleep(20);
+	mdelay(20);
 	return 0;
 }
 
-static int ventana_ov5650s_power_off(void)
+static int ventana_right_ov5650_power_off(void)
 {
+	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 0);
 	gpio_direction_output(CAM1_RST_L_GPIO, 0);
 	gpio_direction_output(CAM1_PWR_DN_GPIO, 1);
 	gpio_direction_output(CAM1_LDO_SHUTDN_L_GPIO, 0);
-	ventana_ov5650_power_off();
 	return 0;
 }
 
-struct ov5650_platform_data ventana_ov5650s_data = {
-	.power_on = ventana_ov5650s_power_on,
-	.power_off = ventana_ov5650s_power_off,
+struct ov5650_platform_data ventana_right_ov5650_data = {
+	.power_on = ventana_right_ov5650_power_on,
+	.power_off = ventana_right_ov5650_power_off,
 };
 
 static int ventana_ov2710_power_on(void)
@@ -121,11 +130,11 @@ static int ventana_ov2710_power_on(void)
 	gpio_direction_output(CAMERA_CSI_MUX_SEL_GPIO, 1);
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 1);
 	gpio_direction_output(CAM3_PWR_DN_GPIO, 0);
-	msleep(5);
+	mdelay(5);
 	gpio_direction_output(CAM3_RST_L_GPIO, 0);
-	msleep(1);
+	mdelay(1);
 	gpio_direction_output(CAM3_RST_L_GPIO, 1);
-	msleep(20);
+	mdelay(20);
 	return 0;
 }
 
@@ -141,6 +150,57 @@ static int ventana_ov2710_power_off(void)
 struct ov2710_platform_data ventana_ov2710_data = {
 	.power_on = ventana_ov2710_power_on,
 	.power_off = ventana_ov2710_power_off,
+};
+
+static int ventana_ssl3250a_init(void)
+{
+	gpio_request(CAMERA_FLASH_ACT_GPIO, "torch_gpio_act");
+	gpio_direction_output(CAMERA_FLASH_ACT_GPIO, 0);
+	tegra_gpio_enable(CAMERA_FLASH_ACT_GPIO);
+	gpio_request(CAMERA_FLASH_STRB_GPIO, "torch_gpio_strb");
+	gpio_direction_output(CAMERA_FLASH_STRB_GPIO, 0);
+	tegra_gpio_enable(CAMERA_FLASH_STRB_GPIO);
+	gpio_export(CAMERA_FLASH_STRB_GPIO, false);
+	return 0;
+}
+
+static void ventana_ssl3250a_exit(void)
+{
+	gpio_set_value(CAMERA_FLASH_STRB_GPIO, 0);
+	gpio_free(CAMERA_FLASH_STRB_GPIO);
+	tegra_gpio_disable(CAMERA_FLASH_STRB_GPIO);
+	gpio_set_value(CAMERA_FLASH_ACT_GPIO, 0);
+	gpio_free(CAMERA_FLASH_ACT_GPIO);
+	tegra_gpio_disable(CAMERA_FLASH_ACT_GPIO);
+}
+
+static int ventana_ssl3250a_gpio_strb(int val)
+{
+	int prev_val;
+	prev_val = gpio_get_value(CAMERA_FLASH_STRB_GPIO);
+	gpio_set_value(CAMERA_FLASH_STRB_GPIO, val);
+	return prev_val;
+};
+
+static int ventana_ssl3250a_gpio_act(int val)
+{
+	int prev_val;
+	prev_val = gpio_get_value(CAMERA_FLASH_ACT_GPIO);
+	gpio_set_value(CAMERA_FLASH_ACT_GPIO, val);
+	return prev_val;
+};
+
+static struct ssl3250a_platform_data ventana_ssl3250a_data = {
+	.config		= CAMERA_FLASH_OP_MODE,
+	.max_amp_indic	= CAMERA_FLASH_MAX_LED_AMP,
+	.max_amp_torch	= CAMERA_FLASH_MAX_TORCH_AMP,
+	.max_amp_flash	= CAMERA_FLASH_MAX_FLASH_AMP,
+	.init		= ventana_ssl3250a_init,
+	.exit		= ventana_ssl3250a_exit,
+	.gpio_act	= ventana_ssl3250a_gpio_act,
+	.gpio_en1	= NULL,
+	.gpio_en2	= NULL,
+	.gpio_strb	= ventana_ssl3250a_gpio_strb,
 };
 
 static void ventana_isl29018_init(void)
@@ -228,6 +288,13 @@ static const struct i2c_board_info ventana_i2c3_board_info_pca9546[] = {
 	},
 };
 
+static const struct i2c_board_info ventana_i2c3_board_info_ssl3250a[] = {
+	{
+		I2C_BOARD_INFO("ssl3250a", 0x30),
+		.platform_data = &ventana_ssl3250a_data,
+	},
+};
+
 static struct i2c_board_info ventana_i2c4_board_info[] = {
 	{
 		I2C_BOARD_INFO("nct1008", 0x4C),
@@ -245,15 +312,15 @@ static struct i2c_board_info ventana_i2c4_board_info[] = {
 
 static struct i2c_board_info ventana_i2c6_board_info[] = {
 	{
-		I2C_BOARD_INFO("ov5650s", 0x36),
-		.platform_data = &ventana_ov5650s_data,
+		I2C_BOARD_INFO("ov5650R", 0x36),
+		.platform_data = &ventana_right_ov5650_data,
 	},
 };
 
 static struct i2c_board_info ventana_i2c7_board_info[] = {
 	{
-		I2C_BOARD_INFO("ov5650", 0x36),
-		.platform_data = &ventana_ov5650_data,
+		I2C_BOARD_INFO("ov5650L", 0x36),
+		.platform_data = &ventana_left_ov5650_data,
 	},
 	{
 		I2C_BOARD_INFO("sh532u", 0x72),
@@ -344,6 +411,9 @@ int __init ventana_sensors_init(void)
 		i2c_register_board_info(2, ventana_i2c2_board_info,
 			ARRAY_SIZE(ventana_i2c2_board_info));
 	}
+
+	i2c_register_board_info(3, ventana_i2c3_board_info_ssl3250a,
+		ARRAY_SIZE(ventana_i2c3_board_info_ssl3250a));
 
 	i2c_register_board_info(4, ventana_i2c4_board_info,
 		ARRAY_SIZE(ventana_i2c4_board_info));
@@ -446,7 +516,8 @@ int __init ventana_camera_late_init(void)
 	i2c_new_device(i2c_get_adapter(3), ventana_i2c3_board_info_pca9546);
 
 	ventana_ov2710_power_off();
-	ventana_ov5650s_power_off();
+	ventana_left_ov5650_power_off();
+	ventana_right_ov5650_power_off();
 
 	ret = regulator_disable(cam_ldo6);
 	if (ret){

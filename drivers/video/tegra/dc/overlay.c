@@ -59,6 +59,8 @@ struct tegra_overlay_info {
 
 	struct tegra_dc		*dc;
 
+	struct tegra_dc_blend	blend;
+
 	struct workqueue_struct	*flip_wq;
 
 	/* Big enough for tegra_dc%u when %u < 10 */
@@ -83,6 +85,7 @@ struct tegra_overlay_flip_data {
 	struct tegra_overlay_info	*overlay;
 	struct tegra_overlay_flip_win	win[TEGRA_FB_FLIP_N_WINDOWS];
 	u32				syncpt_max;
+	u32				flags;
 };
 
 /* Overlay window manipulation */
@@ -156,11 +159,16 @@ static int tegra_overlay_set_windowattr(struct tegra_overlay_info *overlay,
 	win->out_w = flip_win->attr.out_w;
 	win->out_h = flip_win->attr.out_h;
 
-	if (((win->out_x + win->out_w) > xres) && (win->out_x < xres))
-		win->out_w = xres - win->out_x;
-
-	if (((win->out_y + win->out_h) > yres) && (win->out_y < yres))
-		win->out_h = yres - win->out_y;
+	if ((((win->out_x + win->out_w) > xres) && (win->out_x < xres)) ||
+		(((win->out_y + win->out_h) > yres) && (win->out_y < yres))) {
+		pr_warning("outside of FB: "
+				"FB=(%d,%d,%d,%d) "
+				"src=(%d,%d,%d,%d) ",
+				"dst=(%d,%d,%d,%d)",
+				0, 0, xres, yres,
+				win->x, win->y, win->w, win->h,
+				win->out_x, win->out_y, win->out_w, win->out_h);
+	}
 
 	win->z = flip_win->attr.z;
 	win->cur_handle = flip_win->handle;
@@ -181,8 +189,52 @@ static int tegra_overlay_set_windowattr(struct tegra_overlay_info *overlay,
 					   msecs_to_jiffies(500));
 	}
 
+	/* Store the blend state incase we need to reorder later */
+	overlay->blend.z[win->idx] = win->z;
+	overlay->blend.flags[win->idx] = win->flags & TEGRA_WIN_BLEND_FLAGS_MASK;
 
 	return 0;
+}
+
+/* overlay policy for premult is dst alpha, which needs reassignment */
+/* of blend settings for the DC */
+static void tegra_overlay_blend_reorder(struct tegra_dc_blend *blend,
+					struct tegra_dc_win *windows[])
+{
+	int idx, below;
+
+	/* Copy across the original blend state to each window */
+	for (idx = 0; idx < DC_N_WINDOWS; idx++) {
+		windows[idx]->z = blend->z[idx];
+		windows[idx]->flags &= ~TEGRA_WIN_BLEND_FLAGS_MASK;
+		windows[idx]->flags |= blend->flags[idx];
+	}
+
+	/* Find a window with PreMult */
+	for (idx = 0; idx < DC_N_WINDOWS; idx++) {
+		if (blend->flags[idx] == TEGRA_WIN_FLAG_BLEND_PREMULT)
+			break;
+	}
+	if (idx == DC_N_WINDOWS)
+		return;
+
+	/* Find the window directly below it */
+	for (below = 0; below < DC_N_WINDOWS; below++) {
+		if (below == idx)
+			continue;
+		if (blend->z[below] > blend->z[idx])
+			break;
+	}
+	if (below == DC_N_WINDOWS)
+		return;
+
+	/* Switch the flags and the ordering */
+	windows[idx]->z = blend->z[below];
+	windows[idx]->flags &= ~TEGRA_WIN_BLEND_FLAGS_MASK;
+	windows[idx]->flags |= blend->flags[below];
+	windows[below]->z = blend->z[idx];
+	windows[below]->flags &= ~TEGRA_WIN_BLEND_FLAGS_MASK;
+	windows[below]->flags |= blend->flags[idx];
 }
 
 static void tegra_overlay_flip_worker(struct work_struct *work)
@@ -230,9 +282,20 @@ static void tegra_overlay_flip_worker(struct work_struct *work)
 #endif
 	}
 
-	tegra_dc_update_windows(wins, nr_win);
-	/* TODO: implement swapinterval here */
-	tegra_dc_sync_windows(wins, nr_win);
+	if (data->flags & TEGRA_OVERLAY_FLIP_FLAG_BLEND_REORDER) {
+		struct tegra_dc_win *dcwins[DC_N_WINDOWS];
+
+		for (i = 0; i < DC_N_WINDOWS; i++)
+			dcwins[i] = tegra_dc_get_window(overlay->dc, i);
+
+		tegra_overlay_blend_reorder(&overlay->blend, dcwins);
+		tegra_dc_update_windows(dcwins, DC_N_WINDOWS);
+		tegra_dc_sync_windows(dcwins, DC_N_WINDOWS);
+	} else {
+		tegra_dc_update_windows(wins, nr_win);
+		/* TODO: implement swapinterval here */
+		tegra_dc_sync_windows(wins, nr_win);
+	}
 
 	tegra_dc_incr_syncpt_min(overlay->dc, data->syncpt_max);
 
@@ -266,6 +329,7 @@ static int tegra_overlay_flip(struct tegra_overlay_info *overlay,
 
 	INIT_WORK(&data->work, tegra_overlay_flip_worker);
 	data->overlay = overlay;
+	data->flags = args->flags;
 
 	for (i = 0; i < TEGRA_FB_FLIP_N_WINDOWS; i++) {
 		flip_win = &data->win[i];
@@ -355,6 +419,7 @@ static void tegra_overlay_put_locked(struct overlay_client *client, int idx)
 	flip_args.win[0].buff_id = 0;
 	flip_args.win[1].index = -1;
 	flip_args.win[2].index = -1;
+	flip_args.flags = 0;
 
 	tegra_overlay_flip(dev, &flip_args, NULL);
 	if (dev->dc->mode.pclk != 0)

@@ -39,6 +39,7 @@
 #define CL_SEL_POS	1
 #define RTC_ALARM1_HI	0xc1
 #define RTC_COUNT4	0xc6
+#define RTC_COUNT4_DUMMYREAD 0xc5  /* start a PMU RTC access by reading the register prior to the RTC_COUNT4 */
 
 struct tps6586x_rtc {
 	unsigned long		epoch_start;
@@ -58,17 +59,17 @@ static int tps6586x_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	struct device *tps_dev = to_tps6586x_dev(dev);
 	unsigned long long ticks = 0;
 	unsigned long seconds;
-	u8 buff[5];
+	u8 buff[6];
 	int err;
 	int i;
 
-	err = tps6586x_reads(tps_dev, RTC_COUNT4, sizeof(buff), buff);
+	err = tps6586x_reads(tps_dev, RTC_COUNT4_DUMMYREAD, sizeof(buff), buff);
 	if (err < 0) {
 		dev_err(dev, "failed to read counter\n");
 		return err;
 	}
 
-	for (i = 0; i < sizeof(buff); i++) {
+	for (i = 1; i < sizeof(buff); i++) {
 		ticks <<= 8;
 		ticks |= buff[i];
 	}
@@ -291,8 +292,9 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 
 	/* 1 kHz tick mode, enable tick counting */
 	err = tps6586x_update(tps_dev, RTC_CTRL,
-			RTC_ENABLE | ((pdata->cl_sel<<CL_SEL_POS)&CL_SEL_MASK),
-			RTC_ENABLE | OSC_SRC_SEL | PRE_BYPASS | CL_SEL_MASK);
+		RTC_ENABLE | OSC_SRC_SEL | ((pdata->cl_sel << CL_SEL_POS) &
+					    CL_SEL_MASK),
+		RTC_ENABLE | OSC_SRC_SEL | PRE_BYPASS | CL_SEL_MASK);
 	if (err < 0) {
 		dev_err(&pdev->dev, "unable to start counter\n");
 		goto fail;
