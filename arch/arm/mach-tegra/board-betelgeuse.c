@@ -258,6 +258,7 @@ static void __init tegra_betelgeuse_fixup(struct machine_desc *desc,
 
 static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
 	/* name		parent		rate		enabled */
+	/*
 	{ "clk_dev1",	NULL,		26000000,	true},
 	{ "clk_m",	NULL,		12000000,	true},
 	{ "3d",		"pll_m",	266400000,	true},
@@ -344,6 +345,29 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
 	{ "rtc",	"clk_32k",	32768,		true},
 	{ "kbc",	"clk_32k",	32768,		true},
 	{ NULL,		NULL,		0,		0},
+	*/
+        { "apbdma",     "hclk",         54000000,       true},
+        { "audio",      "pll_a_out0",   11289600,       true},
+        { "audio_2x",   "audio",        22579200,       false},
+        { "uarta",      "clk_m",        12000000,       true},
+        { "uartd",      "pll_p",        216000000,      true},
+        { "pwm",        "clk_32k",      32768,          true},
+        { "clk_d",      "clk_m",        24000000,       true},
+        { "pll_a",      "pll_p_out1",   56448000,       true},
+        { "pll_a_out0", "pll_a",        11289600,       true},
+        { "i2s1",       "pll_a_out0",   11289600,       false},
+        { "i2s2",       "pll_a_out0",   11289600,       false},
+        { "pll_c",      "clk_m",        600000000,      true},
+        { "pll_c_out1", "pll_c",        240000000,      true},
+        { "pll_p_out4", "pll_p",        24000000,       true},
+        { "i2c1_i2c",   "pll_p_out3",   72000000,       true},
+        { "i2c2_i2c",   "pll_p_out3",   72000000,       true},
+        { "i2c3_i2c",   "pll_p_out3",   72000000,       true},
+        { "dvc_i2c",    "pll_p_out3",   72000000,       true},
+        { "i2c1",       "clk_m",        3000000,        false},
+        { "i2c2",       "clk_m",        3000000,        false},
+        { "i2c3",       "clk_m",        3000000,        false},
+        { NULL,         NULL,           0,              0},
 };
 
 static struct tegra_suspend_platform_data betelgeuse_suspend = {
