@@ -181,6 +181,25 @@ static struct tegra_dc_mode betelgeuse_panel_modes[] = {
 	},
 };
 
+
+/*
+static struct tegra_dc_mode betelgeuse_panel_modes[] = {
+        {
+                .pclk = 42430000,
+                .h_ref_to_sync = 4,
+                .v_ref_to_sync = 2,
+                .h_sync_width = 136,
+                .v_sync_width = 4,
+                .h_back_porch = 138,
+                .v_back_porch = 21,
+                .h_active = 1024,
+                .v_active = 600,
+                .h_front_porch = 34,
+                .v_front_porch = 4,
+        },
+};
+*/
+
 static struct tegra_fb_data betelgeuse_fb_data = {
 	.win		= 0,
 	.xres		= 1024,
@@ -343,6 +362,10 @@ int __init betelgeuse_panel_init(void)
 	gpio_request(betelgeuse_lvds_shutdown, "lvds_shdn");
 	gpio_direction_output(betelgeuse_lvds_shutdown, 1);
 	tegra_gpio_enable(betelgeuse_lvds_shutdown);
+
+	gpio_request(betelgeuse_hdmi_hpd, "hdmi_hpd");
+	gpio_direction_input(betelgeuse_hdmi_hpd);
+	tegra_gpio_enable(betelgeuse_hdmi_hpd);
 
 	err = platform_add_devices(betelgeuse_gfx_devices,
 				   ARRAY_SIZE(betelgeuse_gfx_devices));
