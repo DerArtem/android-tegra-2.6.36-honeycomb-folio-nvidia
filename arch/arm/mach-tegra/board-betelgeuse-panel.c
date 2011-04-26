@@ -181,7 +181,6 @@ static struct tegra_dc_mode betelgeuse_panel_modes[] = {
 	},
 };
 
-
 /*
 static struct tegra_dc_mode betelgeuse_panel_modes[] = {
         {
@@ -197,6 +196,38 @@ static struct tegra_dc_mode betelgeuse_panel_modes[] = {
                 .h_front_porch = 34,
                 .v_front_porch = 4,
         },
+};
+
+static struct tegra_dc_mode betelgeuse_panel_modes[] = {
+        {
+                .pclk = 72072000,
+                .h_ref_to_sync = 11,
+                .v_ref_to_sync = 1,
+                .h_sync_width = 58,
+                .v_sync_width = 4,
+                .h_back_porch = 58,
+                .v_back_porch = 4,
+                .h_active = 1366,
+                .v_active = 768,
+                .h_front_porch = 58,
+                .v_front_porch = 4,
+        },
+};
+*/
+
+/*
+static struct tegra_fb_data betelgeuse_fb_data = {
+        .win            = 0,
+        .xres           = 1366,
+        .yres           = 768,
+        .bits_per_pixel = 32,
+};
+
+static struct tegra_fb_data betelgeuse_hdmi_fb_data = {
+        .win            = 0,
+        .xres           = 1366,
+        .yres           = 768,
+        .bits_per_pixel = 32,
 };
 */
 
