@@ -27,8 +27,8 @@
 #include <linux/device.h>
 #include <mach/powergate.h>
 #include <mach/clk.h>
-#include <nvhost_syncpt.h>
 
+#include "nvhost_syncpt.h"
 #include "dev.h"
 
 #define ACM_TIMEOUT_MSEC 25
