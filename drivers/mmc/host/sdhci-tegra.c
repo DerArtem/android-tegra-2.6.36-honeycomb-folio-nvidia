@@ -41,12 +41,18 @@ struct tegra_sdhci_host {
 	bool card_always_on;
 	u32 sdhci_ints;
 	int wp_gpio;
+	int card_present;
+	int cd_gpio;
+	int cd_gpio_polarity;
 };
 
 static irqreturn_t carddetect_irq(int irq, void *data)
 {
 	struct sdhci_host *sdhost = (struct sdhci_host *)data;
+	struct tegra_sdhci_host *host = sdhci_priv(sdhost);
 
+	host->card_present =
+		(gpio_get_value(host->cd_gpio) == host->cd_gpio_polarity);
 	tasklet_schedule(&sdhost->card_tasklet);
 	return IRQ_HANDLED;
 };
@@ -86,6 +92,13 @@ static void tegra_sdhci_set_clock(struct sdhci_host *sdhci, unsigned int clock)
 	tegra_sdhci_enable_clock(host, clock);
 }
 
+static int tegra_sdhci_card_detect(struct sdhci_host *sdhost)
+{
+	struct tegra_sdhci_host *host = sdhci_priv(sdhost);
+
+	return host->card_present;
+}
+
 static int tegra_sdhci_get_ro(struct sdhci_host *sdhci)
 {
 	struct tegra_sdhci_host *host;
@@ -99,6 +112,7 @@ static struct sdhci_ops tegra_sdhci_ops = {
 	.enable_dma = tegra_sdhci_enable_dma,
 	.set_clock = tegra_sdhci_set_clock,
 	.get_ro = tegra_sdhci_get_ro,
+	.card_detect = tegra_sdhci_card_detect,
 };
 
 static int __devinit tegra_sdhci_probe(struct platform_device *pdev)
@@ -137,6 +151,8 @@ static int __devinit tegra_sdhci_probe(struct platform_device *pdev)
 	host->sdhci = sdhci;
 	host->card_always_on = (plat->power_gpio == -1) ? 1 : 0;
 	host->wp_gpio = plat->wp_gpio;
+	host->cd_gpio = plat->cd_gpio;
+	host->cd_gpio_polarity = plat->cd_gpio_polarity;
 
 	host->clk = clk_get(&pdev->dev, plat->clk_id);
 	if (IS_ERR(host->clk)) {
@@ -163,7 +179,8 @@ static int __devinit tegra_sdhci_probe(struct platform_device *pdev)
 			SDHCI_QUIRK_8_BIT_DATA |
 			SDHCI_QUIRK_NO_VERSION_REG |
 			SDHCI_QUIRK_BROKEN_ADMA_ZEROLEN_DESC |
-			SDHCI_QUIRK_RUNTIME_DISABLE;
+			SDHCI_QUIRK_RUNTIME_DISABLE |
+			SDHCI_QUIRK_BROKEN_CARD_DETECTION;
 
 	if (plat->force_hs != 0)
 		sdhci->quirks |= SDHCI_QUIRK_FORCE_HIGH_SPEED_MODE;
@@ -174,6 +191,8 @@ static int __devinit tegra_sdhci_probe(struct platform_device *pdev)
 			plat->funcs,
 			plat->num_funcs);
 #endif
+	if (host->card_always_on)
+		sdhci->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
 
 	rc = sdhci_add_host(sdhci);
 	if (rc)
@@ -188,10 +207,14 @@ static int __devinit tegra_sdhci_probe(struct platform_device *pdev)
 
 		if (rc)
 			goto err_remove_host;
+		host->card_present =
+			(gpio_get_value(plat->cd_gpio) == host->cd_gpio_polarity);
 	} else if (plat->register_status_notify) {
 		plat->register_status_notify(
 			tegra_sdhci_status_notify_cb, sdhci);
 	}
+       if (plat->cd_gpio == -1)
+		host->card_present = true;
 
 	if (plat->board_probe)
 		plat->board_probe(pdev->id, sdhci->mmc);

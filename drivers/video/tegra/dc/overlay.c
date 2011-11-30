@@ -38,6 +38,8 @@
 #include "../nvmap/nvmap.h"
 #include "overlay.h"
 
+DEFINE_MUTEX(tegra_flip_lock);
+
 struct overlay_client;
 
 struct overlay {
@@ -159,15 +161,28 @@ static int tegra_overlay_set_windowattr(struct tegra_overlay_info *overlay,
 	win->out_w = flip_win->attr.out_w;
 	win->out_h = flip_win->attr.out_h;
 
-	if ((((win->out_x + win->out_w) > xres) && (win->out_x < xres)) ||
-		(((win->out_y + win->out_h) > yres) && (win->out_y < yres))) {
-		pr_warning("outside of FB: "
-				"FB=(%d,%d,%d,%d) "
-				"src=(%d,%d,%d,%d) ",
-				"dst=(%d,%d,%d,%d)",
-				0, 0, xres, yres,
-				win->x, win->y, win->w, win->h,
-				win->out_x, win->out_y, win->out_w, win->out_h);
+	WARN_ONCE(win->out_x >= xres,
+		"%s:application window x offset exceeds display width(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_x, xres);
+	WARN_ONCE(win->out_y >= yres,
+		"%s:application window y offset exceeds display height(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_y, yres);
+	WARN_ONCE(win->out_x + win->out_w > xres && win->out_x < xres,
+		"%s:application window width(%d) exceeds display width(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_x + win->out_w, xres);
+	WARN_ONCE(win->out_y + win->out_h > yres && win->out_y < yres,
+		"%s:application window height(%d) exceeds display height(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_y + win->out_h, yres);
+
+	if (((win->out_x + win->out_w) > xres) && (win->out_x < xres)) {
+		long new_w = xres - win->out_x;
+		win->w = win->w * new_w / win->out_w;
+	        win->out_w = new_w;
+	}
+	if (((win->out_y + win->out_h) > yres) && (win->out_y < yres)) {
+		long new_h = yres - win->out_y;
+		win->h = win->h * new_h / win->out_h;
+	        win->out_h = new_h;
 	}
 
 	win->z = flip_win->attr.z;
@@ -186,7 +201,8 @@ static int tegra_overlay_set_windowattr(struct tegra_overlay_info *overlay,
 		nvhost_syncpt_wait_timeout(&overlay->ndev->host->syncpt,
 					   flip_win->attr.pre_syncpt_id,
 					   flip_win->attr.pre_syncpt_val,
-					   msecs_to_jiffies(500));
+					   msecs_to_jiffies(500),
+					   NULL);
 	}
 
 	/* Store the blend state incase we need to reorder later */
@@ -289,15 +305,17 @@ static void tegra_overlay_flip_worker(struct work_struct *work)
 			dcwins[i] = tegra_dc_get_window(overlay->dc, i);
 
 		tegra_overlay_blend_reorder(&overlay->blend, dcwins);
+		tegra_dc_set_dynamic_emc(dcwins, DC_N_WINDOWS);
 		tegra_dc_update_windows(dcwins, DC_N_WINDOWS);
 		tegra_dc_sync_windows(dcwins, DC_N_WINDOWS);
 	} else {
+		tegra_dc_set_dynamic_emc(wins, nr_win);
 		tegra_dc_update_windows(wins, nr_win);
 		/* TODO: implement swapinterval here */
 		tegra_dc_sync_windows(wins, nr_win);
 	}
 
-	tegra_dc_incr_syncpt_min(overlay->dc, data->syncpt_max);
+		tegra_dc_incr_syncpt_min(overlay->dc, data->syncpt_max);
 
 	/* unpin and deref previous front buffers */
 	for (i = 0; i < nr_unpin; i++) {
@@ -320,10 +338,17 @@ static int tegra_overlay_flip(struct tegra_overlay_info *overlay,
 	if (WARN_ON(!overlay->ndev))
 		return -EFAULT;
 
+	mutex_lock(&tegra_flip_lock);
+	if (!overlay->dc->enabled) {
+		mutex_unlock(&tegra_flip_lock);
+		return -EFAULT;
+	}
+
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (data == NULL) {
 		dev_err(&overlay->ndev->dev,
 			"can't allocate memory for flip\n");
+		mutex_unlock(&tegra_flip_lock);
 		return -ENOMEM;
 	}
 
@@ -352,8 +377,15 @@ static int tegra_overlay_flip(struct tegra_overlay_info *overlay,
 
 	queue_work(overlay->flip_wq, &data->work);
 
+	/*
+	 * Before the queued flip_wq get scheduled, we set the EMC clock to the
+	 * default value in order to do FLIP without glitch.
+	 */
+	tegra_dc_set_default_emc(overlay->dc);
+
 	args->post_syncpt_val = syncpt_max;
 	args->post_syncpt_id = tegra_dc_get_syncpt_id(overlay->dc);
+	mutex_unlock(&tegra_flip_lock);
 
 	return 0;
 
@@ -367,6 +399,7 @@ surf_err:
 		}
 	}
 	kfree(data);
+	mutex_unlock(&tegra_flip_lock);
 	return err;
 }
 static void tegra_overlay_set_emc_freq(struct tegra_overlay_info *dev)
@@ -598,6 +631,7 @@ static int tegra_overlay_release(struct inode *inode, struct file *filp)
 	list_del(&client->list);
 	spin_unlock_irqrestore(&client->dev->clients_lock, flags);
 
+	nvmap_client_put(client->user_nvmap);
 	put_task_struct(client->task);
 
 	kfree(client);
@@ -725,5 +759,7 @@ void tegra_overlay_unregister(struct tegra_overlay_info *info)
 
 void tegra_overlay_disable(struct tegra_overlay_info *overlay_info)
 {
+	mutex_lock(&tegra_flip_lock);
 	flush_workqueue(overlay_info->flip_wq);
+	mutex_unlock(&tegra_flip_lock);
 }

@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/delay.h>
+#include <linux/reboot.h>
 
 #include <asm/clkdev.h>
 
@@ -201,9 +202,8 @@ static int dvfs_rail_connect_to_regulator(struct dvfs_rail *rail)
 		reg = regulator_get(NULL, rail->reg_id);
 		if (IS_ERR(reg))
 			return -EINVAL;
+		rail->reg = reg;
 	}
-
-	rail->reg = reg;
 
 	return 0;
 }
@@ -395,6 +395,23 @@ static struct notifier_block tegra_dvfs_nb = {
 	.notifier_call = tegra_dvfs_pm_notify,
 };
 
+static int tegra_dvfs_reboot_notify(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	switch (event) {
+	case SYS_RESTART:
+	case SYS_HALT:
+	case SYS_POWER_OFF:
+		tegra_dvfs_suspend();
+		return NOTIFY_OK;
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block tegra_dvfs_reboot_nb = {
+	.notifier_call = tegra_dvfs_reboot_notify,
+};
+
 /* must be called with dvfs lock held */
 static void __tegra_dvfs_rail_disable(struct dvfs_rail *rail)
 {
@@ -473,6 +490,7 @@ int __init tegra_dvfs_late_init(void)
 	mutex_unlock(&dvfs_lock);
 
 	register_pm_notifier(&tegra_dvfs_nb);
+	register_reboot_notifier(&tegra_dvfs_reboot_nb);
 
 	return 0;
 }

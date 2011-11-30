@@ -59,19 +59,20 @@
 #include "devices.h"
 #include "gpio-names.h"
 #include "fuse.h"
+#include "board-whistler-baseband.h"
 
 static struct usb_mass_storage_platform_data tegra_usb_fsg_platform = {
-        .vendor = "NVIDIA",
-        .product = "Tegra 2",
-        .nluns = 1,
+	.vendor = "NVIDIA",
+	.product = "Tegra 2",
+	.nluns = 1,
 };
 
 static struct platform_device tegra_usb_fsg_device = {
-        .name = "usb_mass_storage",
-        .id = -1,
-        .dev = {
-                .platform_data = &tegra_usb_fsg_platform,
-        },
+	.name = "usb_mass_storage",
+	.id = -1,
+	.dev = {
+		.platform_data = &tegra_usb_fsg_platform,
+	},
 };
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
@@ -126,7 +127,7 @@ static inline void whistler_bt_rfkill(void) { }
 
 static struct tegra_utmip_config utmi_phy_config[] = {
 	[0] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -135,7 +136,7 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 			.xcvr_lsrslew = 2,
 		},
 	[1] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -224,7 +225,7 @@ static const struct tegra_pingroup_config i2c2_gen2 = {
 static struct tegra_i2c_platform_data whistler_i2c2_platform_data = {
 	.adapter_nr	= 1,
 	.bus_count	= 2,
-	.bus_clk_rate	= { 400000, 100000 },
+	.bus_clk_rate	= { 100000, 100000 },
 	.bus_mux	= { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len	= { 1, 1 },
 };
@@ -447,7 +448,7 @@ static struct platform_device *whistler_devices[] __initdata = {
 	&tegra_das_device,
 };
 
-static struct synaptics_i2c_rmi_platform_data synaptics_pdata= {
+static struct synaptics_i2c_rmi_platform_data synaptics_pdata = {
 	.flags			= SYNAPTICS_FLIP_X | SYNAPTICS_FLIP_Y | SYNAPTICS_SWAP_XY,
 	.irqflags		= IRQF_TRIGGER_LOW,
 };
@@ -571,7 +572,7 @@ static void whistler_usb_init(void)
 	tegra_otg_device.dev.platform_data = &tegra_otg_pdata;
 	platform_device_register(&tegra_otg_device);
 
-	tegra_ehci3_device.dev.platform_data=&tegra_ehci_pdata[2];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 	platform_device_register(&tegra_ehci3_device);
 }
 
@@ -641,6 +642,7 @@ static void __init tegra_whistler_init(void)
 	whistler_codec_init();
 	whistler_power_off_init();
 	whistler_emc_init();
+	whistler_baseband_init();
 }
 
 int __init tegra_whistler_protected_aperture_init(void)

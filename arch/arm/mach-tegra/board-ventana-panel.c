@@ -32,6 +32,7 @@
 #include <mach/iomap.h>
 #include <mach/dc.h>
 #include <mach/fb.h>
+#include <mach/tegra_cpufreq.h>
 
 #include "devices.h"
 #include "gpio-names.h"
@@ -42,6 +43,10 @@
 #define ventana_lvds_shutdown	TEGRA_GPIO_PB2
 #define ventana_hdmi_hpd	TEGRA_GPIO_PN7
 #define ventana_hdmi_enb	TEGRA_GPIO_PV5
+
+/*panel power on sequence timing*/
+#define ventana_pnl_to_lvds_ms	0
+#define ventana_lvds_to_bl_ms	200
 
 static struct regulator *ventana_hdmi_reg = NULL;
 static struct regulator *ventana_hdmi_pll = NULL;
@@ -105,7 +110,9 @@ static int ventana_panel_enable(void)
 	regulator_put(reg);
 
 	gpio_set_value(ventana_pnl_pwr_enb, 1);
+	mdelay(ventana_pnl_to_lvds_ms);
 	gpio_set_value(ventana_lvds_shutdown, 1);
+	mdelay(ventana_lvds_to_bl_ms);
 	return 0;
 }
 
@@ -245,6 +252,8 @@ static struct tegra_dc_out ventana_disp2_out = {
 	.dcc_bus	= 1,
 	.hotplug_gpio	= ventana_hdmi_hpd,
 
+	.max_pixclock	= KHZ2PICOS(148500),
+
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
 
@@ -332,14 +341,23 @@ struct early_suspend ventana_panel_early_suspender;
 
 static void ventana_panel_early_suspend(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
+	unsigned i;
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
+#ifdef CONFIG_CPU_FREQ
+	cpufreq_save_default_governor();
+	cpufreq_set_conservative_governor();
+#endif
 }
 
 static void ventana_panel_late_resume(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_UNBLANK);
+	unsigned i;
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
+#ifdef CONFIG_CPU_FREQ
+	cpufreq_restore_default_governor();
+#endif
 }
 #endif
 

@@ -175,9 +175,12 @@ static int tegra_fb_set_par(struct fb_info *info)
 
 	if (var->pixclock) {
 		struct tegra_dc_mode mode;
+		struct fb_videomode m;
+
+		fb_var_to_videomode(&m, var);
 
 		info->mode = (struct fb_videomode *)
-			fb_find_best_mode(var, &info->modelist);
+			fb_find_nearest_mode(&m, &info->modelist);
 		if (!info->mode) {
 			dev_warn(&tegra_fb->ndev->dev, "can't match video mode\n");
 			return -EINVAL;
@@ -302,6 +305,8 @@ static int tegra_fb_pan_display(struct fb_var_screeninfo *var,
 		tegra_fb->win->phys_addr = addr;
 		/* TODO: update virt_addr */
 
+		tegra_dc_set_default_emc(tegra_fb->win->dc);
+		tegra_dc_set_dynamic_emc(&tegra_fb->win, 1);
 		tegra_dc_update_windows(&tegra_fb->win, 1);
 		tegra_dc_sync_windows(&tegra_fb->win, 1);
 	}
@@ -407,6 +412,13 @@ static int tegra_fb_set_windowattr(struct tegra_fb_info *tegra_fb,
 		win->flags |= TEGRA_WIN_FLAG_BLEND_PREMULT;
 	else if (flip_win->attr.blend == TEGRA_FB_WIN_BLEND_COVERAGE)
 		win->flags |= TEGRA_WIN_FLAG_BLEND_COVERAGE;
+	if (flip_win->attr.flags & TEGRA_FB_WIN_FLAG_INVERT_H)
+		win->flags |= TEGRA_WIN_FLAG_INVERT_H;
+	if (flip_win->attr.flags & TEGRA_FB_WIN_FLAG_INVERT_V)
+		win->flags |= TEGRA_WIN_FLAG_INVERT_V;
+	if (flip_win->attr.flags & TEGRA_FB_WIN_FLAG_TILED)
+		win->flags |= TEGRA_WIN_FLAG_TILED;
+
 	win->fmt = flip_win->attr.pixformat;
 	win->x = flip_win->attr.x;
 	win->y = flip_win->attr.y;
@@ -417,15 +429,28 @@ static int tegra_fb_set_windowattr(struct tegra_fb_info *tegra_fb,
 	win->out_w = flip_win->attr.out_w;
 	win->out_h = flip_win->attr.out_h;
 
-	if ((((win->out_x + win->out_w) > xres) && (win->out_x < xres)) ||
-		(((win->out_y + win->out_h) > yres) && (win->out_y < yres))) {
-		pr_warning("outside of FB: "
-				"FB=(%d,%d,%d,%d) "
-				"src=(%d,%d,%d,%d) ",
-				"dst=(%d,%d,%d,%d)",
-				0, 0, xres, yres,
-				win->x, win->y, win->w, win->h,
-				win->out_x, win->out_y, win->out_w, win->out_h);
+	WARN_ONCE(win->out_x >= xres,
+		"%s:application window x offset exceeds display width(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_x, xres);
+	WARN_ONCE(win->out_y >= yres,
+		"%s:application window y offset exceeds display height(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_y, yres);
+	WARN_ONCE(win->out_x + win->out_w > xres && win->out_x < xres,
+		"%s:application window width(%d) exceeds display width(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_x + win->out_w, xres);
+	WARN_ONCE(win->out_y + win->out_h > yres && win->out_y < yres,
+		"%s:application window height(%d) exceeds display height(%d)\n",
+		dev_name(&win->dc->ndev->dev), win->out_y + win->out_h, yres);
+
+	if (((win->out_x + win->out_w) > xres) && (win->out_x < xres)) {
+		long new_w = xres - win->out_x;
+		win->w = win->w * new_w / win->out_w;
+	        win->out_w = new_w;
+	}
+	if (((win->out_y + win->out_h) > yres) && (win->out_y < yres)) {
+		long new_h = yres - win->out_y;
+		win->h = win->h * new_h / win->out_h;
+	        win->out_h = new_h;
 	}
 
 	win->z = flip_win->attr.z;
@@ -443,7 +468,8 @@ static int tegra_fb_set_windowattr(struct tegra_fb_info *tegra_fb,
 		nvhost_syncpt_wait_timeout(&tegra_fb->ndev->host->syncpt,
 					   flip_win->attr.pre_syncpt_id,
 					   flip_win->attr.pre_syncpt_val,
-					   msecs_to_jiffies(500));
+					   msecs_to_jiffies(500),
+					   NULL);
 	}
 
 
@@ -491,6 +517,7 @@ static void tegra_fb_flip_worker(struct work_struct *work)
 #endif
 	}
 
+	tegra_dc_set_dynamic_emc(wins, nr_win);
 	tegra_dc_update_windows(wins, nr_win);
 	/* TODO: implement swapinterval here */
 	tegra_dc_sync_windows(wins, nr_win);
@@ -547,6 +574,12 @@ static int tegra_fb_flip(struct tegra_fb_info *tegra_fb,
 	data->syncpt_max = syncpt_max;
 
 	queue_work(tegra_fb->flip_wq, &data->work);
+
+	/*
+	 * Before the queued flip_wq get scheduled, we set the EMC clock to the
+	 * default value in order to do FLIP without glitch.
+	 */
+	tegra_dc_set_default_emc(tegra_fb->win->dc);
 
 	args->post_syncpt_val = syncpt_max;
 	args->post_syncpt_id = tegra_dc_get_syncpt_id(tegra_fb->win->dc);
@@ -659,7 +692,7 @@ static struct fb_ops tegra_fb_ops = {
 
 void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 			      struct fb_monspecs *specs,
-			      bool (*mode_filter)(struct fb_videomode *mode))
+			      bool (*mode_filter)(const struct tegra_dc *dc, struct fb_videomode *mode))
 {
 	struct fb_event event;
 	struct fb_modelist *m;
@@ -685,7 +718,7 @@ void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 
 	for (i = 0; i < specs->modedb_len; i++) {
 		if (mode_filter) {
-			if (mode_filter(&specs->modedb[i]))
+			if (mode_filter(fb_info->win->dc, &specs->modedb[i]))
 				fb_add_videomode(&specs->modedb[i],
 						 &fb_info->info->modelist);
 		} else {
@@ -763,7 +796,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	if (!tegra_fb->flip_wq) {
 		dev_err(&ndev->dev, "couldn't create flip work-queue\n");
 		ret = -ENOMEM;
-		goto err_delete_wq;
+		goto err_put_client;
 	}
 
 	if (fb_mem) {
@@ -773,7 +806,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 		if (!fb_base) {
 			dev_err(&ndev->dev, "fb can't be mapped\n");
 			ret = -EBUSY;
-			goto err_put_client;
+			goto err_delete_wq;
 		}
 		tegra_fb->valid = true;
 	}
@@ -841,6 +874,8 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	dev_info(&ndev->dev, "probed\n");
 
 	if (fb_data->flags & TEGRA_FB_FLIP_ON_PROBE) {
+		tegra_dc_set_default_emc(tegra_fb->win->dc);
+		tegra_dc_set_dynamic_emc(&tegra_fb->win, 1);
 		tegra_dc_update_windows(&tegra_fb->win, 1);
 		tegra_dc_sync_windows(&tegra_fb->win, 1);
 	}
@@ -849,10 +884,10 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 
 err_iounmap_fb:
 	iounmap(fb_base);
-err_put_client:
-	nvmap_client_put(tegra_fb->fb_nvmap);
 err_delete_wq:
 	destroy_workqueue(tegra_fb->flip_wq);
+err_put_client:
+	nvmap_client_put(tegra_fb->fb_nvmap);
 err_free:
 	framebuffer_release(info);
 err:

@@ -128,10 +128,26 @@ static int wired_switch_notify(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
+void tegra_jack_suspend(void)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(wired_jack_gpios); i++)
+		disable_irq(gpio_to_irq(wired_jack_gpios[i].gpio));
+}
 
 void tegra_jack_resume(void)
 {
-	tegra_switch_set_state(get_headset_state());
+	int i, val;
+	for (i = 0; i < ARRAY_SIZE(wired_jack_gpios); i++) {
+		val = gpio_get_value(wired_jack_gpios[i].gpio);
+		val = wired_jack_gpios[i].invert ? !val : val;
+		val = val ? wired_jack_gpios[i].report : 0;
+
+		snd_soc_jack_report(tegra_wired_jack, val,
+			wired_jack_gpios[i].report);
+
+		enable_irq(gpio_to_irq(wired_jack_gpios[i].gpio));
+	}
 }
 
 static struct notifier_block wired_switch_nb = {
@@ -232,6 +248,7 @@ static int tegra_wired_jack_remove(struct platform_device *pdev)
 	gpio_free(tegra_wired_jack_conf.en_mic_int);
 	gpio_free(tegra_wired_jack_conf.en_mic_ext);
 	gpio_free(tegra_wired_jack_conf.en_spkr);
+	gpio_free(tegra_wired_jack_conf.cdc_irq);
 
 	if (tegra_wired_jack_conf.amp_reg) {
 		if (tegra_wired_jack_conf.amp_reg_enabled)

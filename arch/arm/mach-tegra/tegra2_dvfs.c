@@ -50,9 +50,6 @@ static const int core_speedo_nominal_millivolts[] =
 /* spedo_id  0,    1,    2 */
 	{ 1225, 1225, 1300 };
 
-#define KHZ 1000
-#define MHZ 1000000
-
 static struct dvfs_rail tegra2_dvfs_rail_vdd_cpu = {
 	.reg_id = "vdd_cpu",
 	.max_millivolts = 1125,
@@ -189,12 +186,13 @@ static struct dvfs dvfs_init[] = {
 	CORE_DVFS("nor",     -1, 1, KHZ, 0,      92000,  92000,  92000,  92000,  92000,  92000),
 	CORE_DVFS("ide",     -1, 1, KHZ, 0,      0,      100000, 100000, 100000, 100000, 100000),
 	CORE_DVFS("mipi",    -1, 1, KHZ, 0,      40000,  40000,  40000,  40000,  60000,  60000),
-	CORE_DVFS("usbd",    -1, 1, KHZ, 0,      0,      0,      480000, 480000, 480000, 480000),
-	CORE_DVFS("usb2",    -1, 1, KHZ, 0,      0,      0,      480000, 480000, 480000, 480000),
-	CORE_DVFS("usb3",    -1, 1, KHZ, 0,      0,      0,      480000, 480000, 480000, 480000),
+	CORE_DVFS("usbd",    -1, 1, KHZ, 0,      0,      480000, 480000, 480000, 480000, 480000),
+	CORE_DVFS("usb2",    -1, 1, KHZ, 0,      0,      480000, 480000, 480000, 480000, 480000),
+	CORE_DVFS("usb3",    -1, 1, KHZ, 0,      0,      480000, 480000, 480000, 480000, 480000),
 	CORE_DVFS("pcie",    -1, 1, KHZ, 0,      0,      0,      250000, 250000, 250000, 250000),
 	CORE_DVFS("dsi",     -1, 1, KHZ, 100000, 100000, 100000, 500000, 500000, 500000, 500000),
 	CORE_DVFS("tvo",     -1, 1, KHZ, 0,      0,      0,      250000, 250000, 250000, 250000),
+	CORE_DVFS("fuse_burn", -1, 1, KHZ, 0,      0,      0,       26000,  26000,  26000,  26000),
 
 	/*
 	 * The clock rate for the display controllers that determines the

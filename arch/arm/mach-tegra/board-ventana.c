@@ -34,6 +34,7 @@
 #include <linux/input.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/usb/android_composite.h>
+#include <linux/usb/f_accessory.h>
 #include <linux/mfd/tps6586x.h>
 #include <linux/memblock.h>
 
@@ -113,7 +114,7 @@ static struct tegra_audio_platform_data tegra_spdif_pdata = {
 
 static struct tegra_utmip_config utmi_phy_config[] = {
 	[0] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -122,7 +123,7 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 			.xcvr_lsrslew = 2,
 	},
 	[1] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -237,6 +238,7 @@ static __initdata struct tegra_clk_init_table ventana_clk_init_table[] = {
 	{ "pwm",	"clk_32k",	32768,		false},
 	{ "pll_a",	NULL,		56448000,	false},
 	{ "pll_a_out0",	NULL,		11289600,	false},
+	{ "clk_dev1",	"pll_a_out0",	0,		true},
 	{ "i2s1",	"pll_a_out0",	11289600,	false},
 	{ "i2s2",	"pll_a_out0",	11289600,	false},
 	{ "audio",	"pll_a_out0",	11289600,	false},
@@ -255,11 +257,18 @@ static __initdata struct tegra_clk_init_table ventana_clk_init_table[] = {
 
 static char *usb_functions_mtp_ums[] = { "mtp", "usb_mass_storage" };
 static char *usb_functions_mtp_adb_ums[] = { "mtp", "adb", "usb_mass_storage" };
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+static char *usb_functions_accessory[] = { "accessory" };
+static char *usb_functions_accessory_adb[] = { "accessory", "adb" };
+#endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 static char *usb_functions_rndis[] = { "rndis" };
 static char *usb_functions_rndis_adb[] = { "rndis", "adb" };
 #endif
 static char *usb_functions_all[] = {
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	"accessory",
+#endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	"rndis",
 #endif
@@ -279,6 +288,20 @@ static struct android_usb_product usb_products[] = {
 		.num_functions  = ARRAY_SIZE(usb_functions_mtp_adb_ums),
 		.functions      = usb_functions_mtp_adb_ums,
 	},
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	{
+		.vendor_id      = USB_ACCESSORY_VENDOR_ID,
+		.product_id     = USB_ACCESSORY_PRODUCT_ID,
+		.num_functions  = ARRAY_SIZE(usb_functions_accessory),
+		.functions      = usb_functions_accessory,
+	},
+	{
+		.vendor_id      = USB_ACCESSORY_VENDOR_ID,
+		.product_id     = USB_ACCESSORY_ADB_PRODUCT_ID,
+		.num_functions  = ARRAY_SIZE(usb_functions_accessory_adb),
+		.functions      = usb_functions_accessory_adb,
+	},
+#endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	{
 		.product_id     = USB_PRODUCT_ID_RNDIS,
@@ -361,6 +384,7 @@ static struct tegra_ehci_platform_data ventana_ehci2_ulpi_platform_data = {
 	.operating_mode = TEGRA_USB_HOST,
 	.power_down_on_bus_suspend = 1,
 	.phy_config = &ventana_ehci2_ulpi_phy_config,
+	.phy_type = TEGRA_USB_PHY_TYPE_LINK_ULPI,
 };
 
 static struct tegra_i2c_platform_data ventana_i2c1_platform_data = {
@@ -383,7 +407,7 @@ static const struct tegra_pingroup_config i2c2_gen2 = {
 static struct tegra_i2c_platform_data ventana_i2c2_platform_data = {
 	.adapter_nr	= 1,
 	.bus_count	= 2,
-	.bus_clk_rate	= { 400000, 10000 },
+	.bus_clk_rate	= { 100000, 10000 },
 	.bus_mux	= { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len	= { 1, 1 },
 	.slave_addr = 0x00FC,
@@ -417,6 +441,7 @@ static struct tegra_audio_platform_data tegra_audio_pdata[] = {
 		.bit_size	= I2S_BIT_SIZE_16,
 		.i2s_bus_width = 32,
 		.dsp_bus_width = 16,
+		.en_dmic = false, /* by default analog mic is used */
 	},
 	/* For I2S2 */
 	[1] = {
@@ -598,13 +623,9 @@ static struct platform_device tegra_camera = {
 };
 
 static struct platform_device *ventana_devices[] __initdata = {
-	&tegra_usb_fsg_device,
-	&androidusb_device,
 	&tegra_uartb_device,
 	&tegra_uartc_device,
 	&pmu_device,
-	&tegra_udc_device,
-	&tegra_ehci2_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
 #ifdef CONFIG_KEYBOARD_GPIO
@@ -723,6 +744,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 			.phy_config = &ulpi_phy_config,
 			.operating_mode = TEGRA_USB_HOST,
 			.power_down_on_bus_suspend = 1,
+			.phy_type = TEGRA_USB_PHY_TYPE_LINK_ULPI,
 	},
 	[2] = {
 			.phy_config = &utmi_phy_config[1],
@@ -774,6 +796,7 @@ error:
 static void tegra_usb_otg_host_unregister(struct platform_device *pdev)
 {
 	kfree(pdev->dev.platform_data);
+	pdev->dev.platform_data = NULL;
 	platform_device_unregister(pdev);
 }
 
@@ -818,9 +841,14 @@ static void ventana_usb_init(void)
 	int i;
 
 	tegra_usb_phy_init(tegra_usb_phy_pdata, ARRAY_SIZE(tegra_usb_phy_pdata));
-
+	/* OTG should be the first to be registered */
 	tegra_otg_device.dev.platform_data = &tegra_otg_pdata;
 	platform_device_register(&tegra_otg_device);
+
+	platform_device_register(&tegra_usb_fsg_device);
+	platform_device_register(&androidusb_device);
+	platform_device_register(&tegra_udc_device);
+	platform_device_register(&tegra_ehci2_device);
 
 	tegra_ehci3_device.dev.platform_data=&tegra_ehci_pdata[2];
 	platform_device_register(&tegra_ehci3_device);

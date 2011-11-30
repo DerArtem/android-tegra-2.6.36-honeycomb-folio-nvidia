@@ -24,6 +24,10 @@
 #include <linux/delay.h>
 #include <linux/highmem.h>
 #include <linux/memblock.h>
+#include <linux/notifier.h>
+#include <linux/reboot.h>
+#include <linux/mqueue.h>
+#include <linux/bitops.h>
 
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/system.h>
@@ -32,6 +36,7 @@
 #include <mach/dma.h>
 #include <mach/powergate.h>
 #include <mach/system.h>
+#include <mach/tegra_cpufreq.h>
 
 #include "apbio.h"
 #include "board.h"
@@ -39,6 +44,34 @@
 #include "fuse.h"
 
 #define MC_SECURITY_CFG2 0x7c
+
+#define AHB_ARBITRATION_PRIORITY_CTRL		0x4
+#define   AHB_PRIORITY_WEIGHT(x)	(((x) & 0x7) << 29)
+#define   PRIORITY_SELECT_USB	BIT(6)
+#define   PRIORITY_SELECT_USB2	BIT(18)
+#define   PRIORITY_SELECT_USB3	BIT(17)
+
+#define AHB_GIZMO_AHB_MEM		0xc
+#define   ENB_FAST_REARBITRATE	BIT(2)
+#define   DONT_SPLIT_AHB_WR     BIT(7)
+
+#define AHB_GIZMO_USB		0x1c
+#define AHB_GIZMO_USB2		0x78
+#define AHB_GIZMO_USB3		0x7c
+#define   IMMEDIATE	BIT(18)
+
+#define AHB_MEM_PREFETCH_CFG3	0xe0
+#define AHB_MEM_PREFETCH_CFG4	0xe4
+#define AHB_MEM_PREFETCH_CFG1	0xec
+#define AHB_MEM_PREFETCH_CFG2	0xf0
+#define   PREFETCH_ENB	BIT(31)
+#define   MST_ID(x)	(((x) & 0x1f) << 26)
+#define   AHBDMA_MST_ID	MST_ID(5)
+#define   USB_MST_ID	MST_ID(6)
+#define   USB2_MST_ID	MST_ID(18)
+#define   USB3_MST_ID	MST_ID(17)
+#define   ADDR_BNDRY(x)	(((x) & 0xf) << 21)
+#define   INACTIVITY_TIMEOUT(x)	(((x) & 0xffff) << 0)
 
 unsigned long tegra_bootloader_fb_start;
 unsigned long tegra_bootloader_fb_size;
@@ -82,6 +115,7 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "csite",	NULL,		0,		true },
 	{ "timer", 	NULL,		0,		true },
 	{ "kfuse",	NULL,		0,		true },
+	{ "fuse",	NULL,		0,		true },
 	{ "rtc",	NULL,		0,		true },
 
 	/* set frequencies of some device clocks */
@@ -104,7 +138,7 @@ void __init tegra_init_cache(void)
             When called form Normal we obtain an abort.
             Instructions that must be called in Secure :
                - Tag and Data RAM Latency Control Registers (0x108 & 0x10C) must be written in Secure.
-        
+
    The following section of code has been regrouped in the implementation of "l2x0_init".
    The "l2x0_init" will in fact call an SMC intruction to switch from Normal context to Secure context.
    The configuration and activation will be done in Secure.
@@ -122,23 +156,83 @@ void __init tegra_init_cache(void)
 static void __init tegra_init_power(void)
 {
 	tegra_powergate_power_off(TEGRA_POWERGATE_MPE);
+#if !CONFIG_DISABLE_3D_POWERGATING
 	tegra_powergate_power_off(TEGRA_POWERGATE_3D);
+#endif
 	tegra_powergate_power_off(TEGRA_POWERGATE_PCIE);
+}
+
+static inline unsigned long gizmo_readl(unsigned long offset)
+{
+	return readl(IO_TO_VIRT(TEGRA_AHB_GIZMO_BASE + offset));
+}
+
+static inline void gizmo_writel(unsigned long value, unsigned long offset)
+{
+	writel(value, IO_TO_VIRT(TEGRA_AHB_GIZMO_BASE + offset));
+}
+
+static void __init tegra_init_ahb_gizmo_settings(void)
+{
+	unsigned long val;
+
+	val = gizmo_readl(AHB_GIZMO_AHB_MEM);
+	val |= ENB_FAST_REARBITRATE | IMMEDIATE | DONT_SPLIT_AHB_WR;
+	gizmo_writel(val, AHB_GIZMO_AHB_MEM);
+
+	val = gizmo_readl(AHB_GIZMO_USB);
+	val |= IMMEDIATE;
+	gizmo_writel(val, AHB_GIZMO_USB);
+
+	val = gizmo_readl(AHB_GIZMO_USB2);
+	val |= IMMEDIATE;
+	gizmo_writel(val, AHB_GIZMO_USB2);
+
+	val = gizmo_readl(AHB_GIZMO_USB3);
+	val |= IMMEDIATE;
+	gizmo_writel(val, AHB_GIZMO_USB3);
+
+	val = gizmo_readl(AHB_ARBITRATION_PRIORITY_CTRL);
+	val |= PRIORITY_SELECT_USB | PRIORITY_SELECT_USB2 | PRIORITY_SELECT_USB3
+				| AHB_PRIORITY_WEIGHT(7);
+	gizmo_writel(val, AHB_ARBITRATION_PRIORITY_CTRL);
+
+	val = gizmo_readl(AHB_MEM_PREFETCH_CFG1);
+	val &= ~MST_ID(~0);
+	val |= PREFETCH_ENB | AHBDMA_MST_ID | ADDR_BNDRY(0xc) | INACTIVITY_TIMEOUT(0x1000);
+	gizmo_writel(val, AHB_MEM_PREFETCH_CFG1);
+
+	val = gizmo_readl(AHB_MEM_PREFETCH_CFG2);
+	val &= ~MST_ID(~0);
+	val |= PREFETCH_ENB | USB_MST_ID | ADDR_BNDRY(0xc) | INACTIVITY_TIMEOUT(0x1000);
+	gizmo_writel(val, AHB_MEM_PREFETCH_CFG2);
+
+	val = gizmo_readl(AHB_MEM_PREFETCH_CFG3);
+	val &= ~MST_ID(~0);
+	val |= PREFETCH_ENB | USB3_MST_ID | ADDR_BNDRY(0xc) | INACTIVITY_TIMEOUT(0x1000);
+	gizmo_writel(val, AHB_MEM_PREFETCH_CFG3);
+
+	val = gizmo_readl(AHB_MEM_PREFETCH_CFG4);
+	val &= ~MST_ID(~0);
+	val |= PREFETCH_ENB | USB2_MST_ID | ADDR_BNDRY(0xc) | INACTIVITY_TIMEOUT(0x1000);
+	gizmo_writel(val, AHB_MEM_PREFETCH_CFG4);
 }
 
 static bool console_flushed;
 
-static void tegra_pm_flush_console(void)
+static int tegra_pm_flush_console(struct notifier_block *this,
+	unsigned long code,
+	void *unused)
 {
 	if (console_flushed)
-		return;
+		return NOTIFY_NONE;
 	console_flushed = true;
 
 	printk("\n");
 	pr_emerg("Restarting %s\n", linux_banner);
 	if (!try_acquire_console_sem()) {
 		release_console_sem();
-		return;
+		return NOTIFY_NONE;
 	}
 
 	mdelay(50);
@@ -149,17 +243,23 @@ static void tegra_pm_flush_console(void)
 	else
 		pr_emerg("tegra_restart: Console was locked!\n");
 	release_console_sem();
+
+	return NOTIFY_NONE;
 }
 
 static void tegra_pm_restart(char mode, const char *cmd)
 {
-	tegra_pm_flush_console();
 	arm_machine_restart(mode, cmd);
 }
+
+static struct notifier_block tegra_reboot_notifier = {
+	.notifier_call = tegra_pm_flush_console,
+};
 
 void __init tegra_common_init(void)
 {
 	arm_pm_restart = tegra_pm_restart;
+	register_reboot_notifier(&tegra_reboot_notifier);
 	tegra_init_fuse();
 	tegra_init_clock();
 	tegra_clk_init_from_table(common_clk_init_table);
@@ -167,6 +267,7 @@ void __init tegra_common_init(void)
 	tegra_init_cache();
 	tegra_dma_init();
 	tegra_init_apb_dma();
+	tegra_init_ahb_gizmo_settings();
 }
 
 static int __init tegra_bootloader_fb_arg(char *options)
@@ -399,3 +500,74 @@ void __init tegra_reserve(unsigned long carveout_size, unsigned long fb_size,
 		tegra_carveout_start,
 		tegra_carveout_start + tegra_carveout_size - 1);
 }
+
+#if defined CONFIG_HAS_EARLYSUSPEND && defined CONFIG_CPU_FREQ
+static char cpufreq_gov_default[32];
+static char *cpufreq_gov_conservative = "conservative";
+static char *cpufreq_sysfs_place_holder="/sys/devices/system/cpu/cpu%i/cpufreq/scaling_governor";
+
+static void cpufreq_set_governor(char *governor)
+{
+	struct file *scaling_gov = NULL;
+	char    buf[128];
+	int i;
+	loff_t offset = 0;
+
+	if (governor == NULL)
+		return;
+
+	for_each_cpu(i, cpu_present_mask) {
+		sprintf(buf, cpufreq_sysfs_place_holder, i);
+		scaling_gov = filp_open(buf, O_RDWR, 0);
+		if (scaling_gov != NULL) {
+			if (scaling_gov->f_op != NULL &&
+				scaling_gov->f_op->write != NULL)
+				scaling_gov->f_op->write(scaling_gov,
+						governor,
+						strlen(governor),
+						&offset);
+			else
+				pr_err("f_op might be null\n");
+
+			filp_close(scaling_gov, NULL);
+		} else {
+			pr_err("%s. Can't open %s\n", __func__, buf);
+		}
+	}
+}
+
+void cpufreq_save_default_governor(void)
+{
+	struct file *scaling_gov = NULL;
+	char    buf[128];
+	loff_t offset = 0;
+
+	buf[127] = 0;
+	sprintf(buf, cpufreq_sysfs_place_holder,0);
+	scaling_gov = filp_open(buf, O_RDONLY, 0);
+	if (scaling_gov != NULL) {
+		if (scaling_gov->f_op != NULL &&
+			scaling_gov->f_op->read != NULL)
+			scaling_gov->f_op->read(scaling_gov,
+					cpufreq_gov_default,
+					127,
+					&offset);
+		else
+			pr_err("f_op might be null\n");
+
+		filp_close(scaling_gov, NULL);
+	} else {
+		pr_err("%s. Can't open %s\n", __func__, buf);
+	}
+}
+
+void cpufreq_restore_default_governor(void)
+{
+	cpufreq_set_governor(cpufreq_gov_default);
+}
+
+void cpufreq_set_conservative_governor(void)
+{
+	cpufreq_set_governor(cpufreq_gov_conservative);
+}
+#endif

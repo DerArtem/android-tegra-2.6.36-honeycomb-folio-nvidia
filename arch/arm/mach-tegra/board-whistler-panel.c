@@ -25,6 +25,7 @@
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
 #include <linux/earlysuspend.h>
+#include <linux/kernel.h>
 #include <linux/pwm_backlight.h>
 #include <linux/tegra_pwm_bl.h>
 #include <mach/nvhost.h>
@@ -33,6 +34,7 @@
 #include <mach/iomap.h>
 #include <mach/dc.h>
 #include <mach/fb.h>
+#include <mach/tegra_cpufreq.h>
 
 #include "devices.h"
 #include "gpio-names.h"
@@ -196,6 +198,8 @@ static struct tegra_dc_out whistler_disp2_out = {
 	.dcc_bus	= 1,
 	.hotplug_gpio	= whistler_hdmi_hpd,
 
+	.max_pixclock	= KHZ2PICOS(148500),
+
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
 
@@ -296,12 +300,20 @@ static void whistler_panel_early_suspend(struct early_suspend *h)
 {
 	if (num_registered_fb > 0)
 		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
+#ifdef CONFIG_CPU_FREQ
+	cpufreq_save_default_governor();
+	cpufreq_set_conservative_governor();
+#endif
 }
 
 static void whistler_panel_late_resume(struct early_suspend *h)
 {
 	if (num_registered_fb > 0)
 		fb_blank(registered_fb[0], FB_BLANK_UNBLANK);
+
+#ifdef CONFIG_CPU_FREQ
+	cpufreq_restore_default_governor();
+#endif
 }
 #endif
 

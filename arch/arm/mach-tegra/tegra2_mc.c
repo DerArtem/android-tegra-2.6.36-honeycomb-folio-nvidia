@@ -209,7 +209,7 @@ static ssize_t tegra_mc_quantum_store(struct sysdev_class *class,
 	TEGRA_MC_EXPAND(_attr2,_mode2) \
 	TEGRA_MC_EXPAND(_attr3,_mode3)
 
-TEGRA_MC_ATTRIBUTES(enable,0666,log,0444,quantum,0666)
+TEGRA_MC_ATTRIBUTES(enable,0644,log,0444,quantum,0644)
 
 #undef TEGRA_MC_EXPAND
 
@@ -217,7 +217,7 @@ TEGRA_MC_ATTRIBUTES(enable,0666,log,0444,quantum,0666)
 	&attr_##_attr,
 
 static struct sysdev_class_attribute *tegra_mc_attrs[] = {
-	TEGRA_MC_ATTRIBUTES(enable,0666,log,0444,quantum,0666)
+	TEGRA_MC_ATTRIBUTES(enable,0644,log,0444,quantum,0644)
 	NULL
 };
 
@@ -701,6 +701,7 @@ void emc_stat_start(tegra_mc_counter_t *llp_counter,
 	writel(0xFFFFFFFF, emc.mmio + EMC_STAT_DRAM_CLOCK_LIMIT_LO_0);
 	writel(0xFF, emc.mmio + EMC_STAT_DRAM_CLOCK_LIMIT_HI_0);
 
+	llmc_stat = 0;
 	/* Reset then enable statistics */
 	llmc_stat |= (EMC_STAT_CONTROL_0_LLMC_GATHER_CLEAR <<
 			EMC_STAT_CONTROL_0_LLMC_GATHER_SHIFT);
@@ -708,6 +709,7 @@ void emc_stat_start(tegra_mc_counter_t *llp_counter,
 			EMC_STAT_CONTROL_0_DRAM_GATHER_SHIFT);
 	writel(llmc_stat, emc.mmio + EMC_STAT_CONTROL_0);
 
+	llmc_stat = 0;
 	llmc_stat |= (EMC_STAT_CONTROL_0_LLMC_GATHER_ENABLE <<
 			EMC_STAT_CONTROL_0_LLMC_GATHER_SHIFT);
 	llmc_stat |= (EMC_STAT_CONTROL_0_DRAM_GATHER_ENABLE <<

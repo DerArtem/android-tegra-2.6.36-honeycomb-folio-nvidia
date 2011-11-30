@@ -21,6 +21,7 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/usb/otg.h>
+#include <linux/platform_data/tegra_usb.h>
 
 struct tegra_utmip_config {
 	u8 hssync_start_delay;
@@ -83,6 +84,7 @@ struct tegra_xtal_freq;
 
 struct tegra_usb_phy {
 	int instance;
+	bool initialized;
 	const struct tegra_xtal_freq *freq;
 	void __iomem *regs;
 	void __iomem *pad_regs;
@@ -92,24 +94,26 @@ struct tegra_usb_phy {
 	enum tegra_usb_phy_mode mode;
 	void *config;
 	struct regulator *reg_vdd;
+	enum tegra_usb_phy_type usb_phy_type;
 	bool regulator_on;
 	struct otg_transceiver *ulpi;
 };
 
 struct tegra_usb_phy *tegra_usb_phy_open(int instance, void __iomem *regs,
-			void *config, enum tegra_usb_phy_mode phy_mode);
+			void *config, enum tegra_usb_phy_mode phy_mode,
+			enum tegra_usb_phy_type usb_phy_type);
 
-int tegra_usb_phy_power_on(struct tegra_usb_phy *phy);
+int tegra_usb_phy_power_on(struct tegra_usb_phy *phy, bool is_dpd);
 
 void tegra_usb_phy_clk_disable(struct tegra_usb_phy *phy);
 
 void tegra_usb_phy_clk_enable(struct tegra_usb_phy *phy);
 
-void tegra_usb_phy_power_off(struct tegra_usb_phy *phy);
+void tegra_usb_phy_power_off(struct tegra_usb_phy *phy, bool is_dpd);
 
-void tegra_usb_phy_preresume(struct tegra_usb_phy *phy);
+void tegra_usb_phy_preresume(struct tegra_usb_phy *phy, bool is_dpd);
 
-void tegra_usb_phy_postresume(struct tegra_usb_phy *phy);
+void tegra_usb_phy_postresume(struct tegra_usb_phy *phy, bool is_dpd);
 
 void tegra_ehci_phy_restore_start(struct tegra_usb_phy *phy,
 				 enum tegra_usb_phy_port_speed port_speed);

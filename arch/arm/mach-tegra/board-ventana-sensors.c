@@ -1,21 +1,34 @@
 /*
  * arch/arm/mach-tegra/board-ventana-sensors.c
  *
- * Copyright (c) 2011, NVIDIA, All Rights Reserved.
+ * Copyright (c) 2011, NVIDIA CORPORATION, All rights reserved.
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
  *
+ * Neither the name of NVIDIA CORPORATION nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ * TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <linux/delay.h>
@@ -74,6 +87,8 @@ static int ventana_left_ov5650_power_on(void)
 {
 	gpio_direction_output(CAMERA_CSI_MUX_SEL_GPIO, 0);
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 1);
+	gpio_direction_output(CAM2_LDO_SHUTDN_L_GPIO, 1);
+	mdelay(5);
 	gpio_direction_output(CAM2_PWR_DN_GPIO, 0);
 	mdelay(5);
 	gpio_direction_output(CAM2_RST_L_GPIO, 0);
@@ -88,6 +103,7 @@ static int ventana_left_ov5650_power_off(void)
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 0);
 	gpio_direction_output(CAM2_RST_L_GPIO, 0);
 	gpio_direction_output(CAM2_PWR_DN_GPIO, 1);
+	gpio_direction_output(CAM2_LDO_SHUTDN_L_GPIO, 0);
 	return 0;
 }
 
@@ -129,6 +145,8 @@ static int ventana_ov2710_power_on(void)
 {
 	gpio_direction_output(CAMERA_CSI_MUX_SEL_GPIO, 1);
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 1);
+	gpio_direction_output(CAM3_LDO_SHUTDN_L_GPIO, 1);
+	mdelay(5);
 	gpio_direction_output(CAM3_PWR_DN_GPIO, 0);
 	mdelay(5);
 	gpio_direction_output(CAM3_RST_L_GPIO, 0);
@@ -142,6 +160,7 @@ static int ventana_ov2710_power_off(void)
 {
 	gpio_direction_output(CAM3_RST_L_GPIO, 0);
 	gpio_direction_output(CAM3_PWR_DN_GPIO, 1);
+	gpio_direction_output(CAM3_LDO_SHUTDN_L_GPIO, 0);
 	gpio_direction_output(AVDD_DSI_CSI_ENB_GPIO, 0);
 	gpio_direction_output(CAMERA_CSI_MUX_SEL_GPIO, 0);
 	return 0;
@@ -264,9 +283,9 @@ static struct pca953x_platform_data ventana_tca6416_data = {
 };
 
 static struct pca954x_platform_mode ventana_pca9546_modes[] = {
-	{ .adap_id = 6, }, /* REAR CAM1 */
-	{ .adap_id = 7, }, /* REAR CAM2 */
-	{ .adap_id = 8, }, /* FRONT CAM3 */
+	{ .adap_id = 6, .deselect_on_exit = 1 }, /* REAR CAM1 */
+	{ .adap_id = 7, .deselect_on_exit = 1 }, /* REAR CAM2 */
+	{ .adap_id = 8, .deselect_on_exit = 1 }, /* FRONT CAM3 */
 };
 
 static struct pca954x_platform_data ventana_pca9546_data = {
@@ -455,17 +474,17 @@ static struct tegra_camera_gpios ventana_camera_gpio_keys[] = {
 	[0] = TEGRA_CAMERA_GPIO("en_avdd_csi", AVDD_DSI_CSI_ENB_GPIO, 1),
 	[1] = TEGRA_CAMERA_GPIO("cam_i2c_mux_rst_lo", CAM_I2C_MUX_RST_GPIO, 1),
 
-	[2] = TEGRA_CAMERA_GPIO("cam2_ldo_shdn_lo", CAM2_LDO_SHUTDN_L_GPIO, 1),
+	[2] = TEGRA_CAMERA_GPIO("cam2_ldo_shdn_lo", CAM2_LDO_SHUTDN_L_GPIO, 0),
 	[3] = TEGRA_CAMERA_GPIO("cam2_af_pwdn_lo", CAM2_AF_PWR_DN_L_GPIO, 0),
 	[4] = TEGRA_CAMERA_GPIO("cam2_pwdn", CAM2_PWR_DN_GPIO, 0),
 	[5] = TEGRA_CAMERA_GPIO("cam2_rst_lo", CAM2_RST_L_GPIO, 1),
 
-	[6] = TEGRA_CAMERA_GPIO("cam3_ldo_shdn_lo", CAM3_LDO_SHUTDN_L_GPIO, 1),
+	[6] = TEGRA_CAMERA_GPIO("cam3_ldo_shdn_lo", CAM3_LDO_SHUTDN_L_GPIO, 0),
 	[7] = TEGRA_CAMERA_GPIO("cam3_af_pwdn_lo", CAM3_AF_PWR_DN_L_GPIO, 0),
 	[8] = TEGRA_CAMERA_GPIO("cam3_pwdn", CAM3_PWR_DN_GPIO, 0),
 	[9] = TEGRA_CAMERA_GPIO("cam3_rst_lo", CAM3_RST_L_GPIO, 1),
 
-	[10] = TEGRA_CAMERA_GPIO("cam1_ldo_shdn_lo", CAM1_LDO_SHUTDN_L_GPIO, 1),
+	[10] = TEGRA_CAMERA_GPIO("cam1_ldo_shdn_lo", CAM1_LDO_SHUTDN_L_GPIO, 0),
 	[11] = TEGRA_CAMERA_GPIO("cam1_af_pwdn_lo", CAM1_AF_PWR_DN_L_GPIO, 0),
 	[12] = TEGRA_CAMERA_GPIO("cam1_pwdn", CAM1_PWR_DN_GPIO, 0),
 	[13] = TEGRA_CAMERA_GPIO("cam1_rst_lo", CAM1_RST_L_GPIO, 1),

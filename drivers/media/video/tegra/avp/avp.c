@@ -41,6 +41,7 @@
 #include <mach/io.h>
 #include <mach/iomap.h>
 #include <mach/nvmap.h>
+#include <mach/legacy_irq.h>
 
 #include "../../../../video/tegra/nvmap/nvmap.h"
 
@@ -360,7 +361,7 @@ static int msg_wait_ack_locked(struct tegra_avp_info *avp, u32 cmd, u32 *arg)
 {
 	/* rem_ack is a pointer into shared memory that the AVP modifies */
 	volatile u32 *rem_ack = avp->msg_to_avp;
-	unsigned long endtime = jiffies + HZ / 5;
+	unsigned long endtime = jiffies + msecs_to_jiffies(400);
 	int ret;
 
 	do {
@@ -538,6 +539,8 @@ static int avp_node_try_connect(struct trpc_node *node,
 	int ret;
 	unsigned long flags;
 	int len;
+	const int max_retry_cnt = 6;
+	int cnt = 0;
 
 	DBG(AVP_DBG_TRACE_TRPC_CONN, "%s: trying connect from %s\n", __func__,
 		port_name);
@@ -592,16 +595,29 @@ static int avp_node_try_connect(struct trpc_node *node,
 	 * take the from_avp_lock and everything should stay consistent.
 	 */
 	recv_msg_lock(avp);
-	mutex_lock(&avp->to_avp_lock);
-	ret = msg_write(avp, &msg, sizeof(msg), NULL, 0);
-	if (ret) {
-		pr_err("%s: remote has not acked last message (%s)\n", __func__,
-			   port_name);
+	for (cnt = 0; cnt < max_retry_cnt; cnt++) {
+		/* Retry to connect to AVP at this function maximum 6 times.
+		 * Because this section is protected by mutex and
+		 * needed to re-send the CMD_CONNECT command by CPU
+		 * if AVP didn't receive the command.
+		 */
+		mutex_lock(&avp->to_avp_lock);
+		ret = msg_write(avp, &msg, sizeof(msg), NULL, 0);
+		if (ret) {
+			pr_err("%s: remote has not acked last message (%s)\n",
+				   __func__, port_name);
+			mutex_unlock(&avp->to_avp_lock);
+			goto err_msg_write;
+		}
+		ret = msg_wait_ack_locked(avp, CMD_RESPONSE, &rinfo->rem_id);
 		mutex_unlock(&avp->to_avp_lock);
-		goto err_msg_write;
+		if (!ret && rinfo->rem_id)
+			break;
+
+		/* Skip the sleep function at last retry count */
+		if ((cnt + 1) < max_retry_cnt)
+			usleep_range(100, 2000);
 	}
-	ret = msg_wait_ack_locked(avp, CMD_RESPONSE, &rinfo->rem_id);
-	mutex_unlock(&avp->to_avp_lock);
 
 	if (ret) {
 		pr_err("%s: remote end won't respond for '%s'\n", __func__,
@@ -952,6 +968,8 @@ static int avp_init(struct tegra_avp_info *avp, const char *fw_file)
 	memset(avp->kernel_data + avp_fw->size, 0, SZ_1M - avp_fw->size);
 	wmb();
 	release_firmware(avp_fw);
+
+	tegra_init_legacy_irq_cop();
 
 	ret = avp_reset(avp, AVP_KERNEL_VIRT_BASE);
 	if (ret) {
@@ -1347,6 +1365,7 @@ int tegra_avp_release(struct tegra_avp_info *avp)
 {
 	int ret = 0;
 
+	pr_debug("%s: close\n", __func__);
 	mutex_lock(&avp->open_lock);
 	if (!avp->refcount) {
 		pr_err("%s: releasing while in invalid state\n", __func__);
