@@ -24,9 +24,14 @@
 //#include <linux/power/gpio-charger.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
+#include <linux/io.h>
 
+#include <mach/iomap.h>
 #include "board-betelgeuse.h"
-#include "gpio-names.h"
+//#include "gpio-names.h"
+
+#define    PMC_CTRL                0x0
+#define    PMC_CTRL_INTR_LOW       (1<<7)
 
 static struct regulator_consumer_supply tps658621_sm0_supply[] = {
 	REGULATOR_SUPPLY("vdd_core", NULL),
@@ -52,19 +57,22 @@ static struct regulator_consumer_supply tps658621_ldo1_supply[] = { /* 1V2 */
 };
 static struct regulator_consumer_supply tps658621_ldo2_supply[] = { /* VDD_RTC */
 	REGULATOR_SUPPLY("vdd_rtc", NULL),
-	REGULATOR_SUPPLY("vdd_aon", NULL),
+	REGULATOR_SUPPLY("vdd_aon", NULL), /////////// CHECK THIS
 };
+
+// Check below
 static struct regulator_consumer_supply tps658621_ldo3_supply[] = { /* 3V3 */
 	REGULATOR_SUPPLY("avdd_usb", NULL),
 	REGULATOR_SUPPLY("avdd_usb_pll", NULL),
 	REGULATOR_SUPPLY("vddio_nand_3v3", NULL), /* AON? */
 	REGULATOR_SUPPLY("sdio", NULL),
-	REGULATOR_SUPPLY("vmmc", NULL),
+	REGULATOR_SUPPLY("vmmc", NULL), /////////
 	REGULATOR_SUPPLY("vddio_vi", NULL),
 	REGULATOR_SUPPLY("avdd_lvds", NULL),
 	REGULATOR_SUPPLY("tmon0", NULL),
-	REGULATOR_SUPPLY("vddio_wlan", NULL),
+	REGULATOR_SUPPLY("vddio_wlan", NULL), //////
 };
+
 static struct regulator_consumer_supply tps658621_ldo4_supply[] = { 
 	REGULATOR_SUPPLY("avdd_osc", NULL),       /* AVDD_OSC */
 	REGULATOR_SUPPLY("vddio_sys", NULL),
@@ -77,9 +85,7 @@ static struct regulator_consumer_supply tps658621_ldo4_supply[] = {
 	REGULATOR_SUPPLY("vddhostif_bt", NULL),
 	REGULATOR_SUPPLY("wifi3vs", NULL),
 };
-static struct regulator_consumer_supply tps658621_ldo5_supply[] = {
-	REGULATOR_SUPPLY("vddio_nand", NULL),
-};
+
 static struct regulator_consumer_supply tps658621_ldo6_supply[] = {
 	REGULATOR_SUPPLY("avdd_vdac", NULL),
 };
@@ -128,15 +134,13 @@ static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 725, 1500);  
 static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 725, 1500);  // 1200
 static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 1250, 3300); // 3300
 static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1700, 2000); // 1800
-static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 1250, 3300); // 2850
 static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1250, 3300); // 2850
 static struct regulator_init_data ldo7_data = REGULATOR_INIT(ldo7, 1250, 3300); // 3300
 static struct regulator_init_data ldo8_data = REGULATOR_INIT(ldo8, 1250, 3300); // 1800
 static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 1250, 3300); // 2850
-/*
-static struct regulator_init_data soc_data = REGULATOR_INIT(soc, 1250, 3300);
-static struct regulator_init_data buck_data = REGULATOR_INIT(buck, 1250, 3300); 
-*/
+
+//static struct regulator_init_data soc_data = REGULATOR_INIT(soc, 1250, 3300);
+//static struct regulator_init_data buck_data = REGULATOR_INIT(buck, 1250, 3300); 
 
 #define TPS_REG(_id, _data)			\
 	{					\
@@ -146,9 +150,8 @@ static struct regulator_init_data buck_data = REGULATOR_INIT(buck, 1250, 3300);
 	}
 
 /* FIXME: do we have rtc alarm irq? */
-static struct tps6586x_rtc_platform_data betelgeuse_rtc_data = {
-/*	.irq	= TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1, */
-	.irq	= -1,
+static struct tps6586x_rtc_platform_data rtc_data = {
+	.irq	= TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
 	.start	= {
 			.year	= 2009,
 			.month	= 1,
@@ -157,6 +160,7 @@ static struct tps6586x_rtc_platform_data betelgeuse_rtc_data = {
 			.min	= 0,
 			.sec	= 0,
 		},
+	.cl_sel = TPS6586X_RTC_CL_SEL_1_5PF /* use lowest (external 20pF cap) */
 };
 
 static struct tps6586x_subdev_info tps_devs[] = {
@@ -168,24 +172,24 @@ static struct tps6586x_subdev_info tps_devs[] = {
 	TPS_REG(LDO_2, &ldo2_data),
 	TPS_REG(LDO_3, &ldo3_data),
 	TPS_REG(LDO_4, &ldo4_data),
-	TPS_REG(LDO_5, &ldo5_data),
 	TPS_REG(LDO_6, &ldo6_data),
 	TPS_REG(LDO_7, &ldo7_data),
 	TPS_REG(LDO_8, &ldo8_data),
 	TPS_REG(LDO_9, &ldo9_data),
-/*	TPS_REG(SOC, &soc_data),
-	TPS_REG(BUCK, &buck_data), */
+//	TPS_REG(SOC, &soc_data),
+//	TPS_REG(BUCK, &buck_data),
 	{
 		.id		= 0,
 		.name		= "tps6586x-rtc",
-		.platform_data	= &betelgeuse_rtc_data,
+		.platform_data	= &rtc_data,
 	},
 };
 
 static struct tps6586x_platform_data tps_platform = {
+	.irq_base = TPS6586X_INT_BASE,
 	.num_subdevs = ARRAY_SIZE(tps_devs),
 	.subdevs = tps_devs,
-	.gpio_base = TEGRA_NR_GPIOS,
+	.gpio_base = TPS6586X_GPIO_BASE,
 };
 
 static struct i2c_board_info __initdata betelgeuse_regulators[] = {
@@ -197,8 +201,18 @@ static struct i2c_board_info __initdata betelgeuse_regulators[] = {
 
 int __init betelgeuse_regulator_init(void)
 {
-	i2c_register_board_info(4, betelgeuse_regulators, 1);
-	return 0;
+        void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
+        u32 pmc_ctrl;
+
+        /* configure the power management controller to trigger PMU
+        * interrupts when low */
+        pmc_ctrl = readl(pmc + PMC_CTRL);
+        writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
+
+//      regulator_has_full_constraints();
+
+        i2c_register_board_info(4, betelgeuse_regulators, 1);
+        return 0;
 }
 
 int __init betelgeuse_power_init(void)

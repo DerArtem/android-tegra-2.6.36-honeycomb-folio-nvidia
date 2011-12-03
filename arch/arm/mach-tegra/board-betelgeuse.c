@@ -26,6 +26,8 @@
 #include <linux/pda_power.h>
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
+#include <linux/gpio.h>
+#include <linux/gpio_keys.h>
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/platform_data/tegra_usb.h>
@@ -43,11 +45,16 @@
 #include <mach/clk.h>
 #include <mach/usb_phy.h>
 #include <mach/suspend.h>
+#include <mach/spdif.h>
+#include <mach/tegra_das.h>
+
+#include <sound/wm8903.h>
 
 #include "clock.h"
 #include "board.h"
 #include "board-betelgeuse.h"
 #include "devices.h"
+#include "gpio-names.h"
 
 /* NVidia bootloader tags */
 #define ATAG_NVIDIA		0x41000801
@@ -197,16 +204,47 @@ static struct tegra_i2c_platform_data betelgeuse_dvc_platform_data = {
 	.is_dvc		= true,
 };
 
-static struct i2c_board_info __initdata betelgeuse_i2c_bus1_board_info[] = {
-	{
-		I2C_BOARD_INFO("wm8903", 0x1a),
-	},
+#define WM8903_GPn_FN_DMIC_LR_CLK_OUTPUT 6
+
+static struct wm8903_platform_data wm8903_pdata = {
+        .irq_active_low = 0,
+        .micdet_cfg = 0,
+        .micdet_delay = 100,
+        .gpio_base = WM8903_GPIO_BASE,
+        .gpio_cfg = {
+		(WM8903_GPn_FN_DMIC_LR_CLK_OUTPUT << WM8903_GP1_FN_SHIFT),
+		(WM8903_GPn_FN_DMIC_LR_CLK_OUTPUT << WM8903_GP2_FN_SHIFT)
+		| WM8903_GP1_DIR_MASK,
+                0,                     /* as output pin */
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPIO_NO_CONFIG,
+        },
 };
 
+	
+
+static struct i2c_board_info __initdata wm8903_device = {
+	I2C_BOARD_INFO("wm8903", 0x1a),
+	.platform_data = &wm8903_pdata,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+};
+
+static struct i2c_board_info __initdata ak8975_device = {
+	I2C_BOARD_INFO("ak8975", 0x0c),
+	.irq            = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAGNETOMETER),
+};
+
+static struct tegra_audio_platform_data tegra_spdif_pdata = {
+        .dma_on = true,  /* use dma by default */
+        .spdif_clk_rate = 5644800,
+};
+
+/*
 static struct tegra_audio_platform_data tegra_audio_pdata = {
 	.i2s_master	= false,
 	.dsp_master	= false,
-	.dma_on		= true,  /* use dma by default */
+	.dma_on		= true, */ /* use dma by default */
+/*
 	.i2s_clk_rate	= 240000000,
 	.dap_clk	= "clk_dev1",
 	.audio_sync_clk = "audio_2x",
@@ -214,9 +252,131 @@ static struct tegra_audio_platform_data tegra_audio_pdata = {
 	.fifo_fmt	= I2S_FIFO_16_LSB,
 	.bit_size	= I2S_BIT_SIZE_16,
 };
+*/
+
+static struct tegra_audio_platform_data tegra_audio_pdata[] = {
+        /* For I2S1 */
+        [0] = {
+                .i2s_master     = true,
+                .dma_on         = true,  /* use dma by default */
+                .i2s_master_clk = 44100,
+                .i2s_clk_rate   = 11289600,
+                .dap_clk        = "clk_dev1",
+                .audio_sync_clk = "audio_2x",
+                .mode           = I2S_BIT_FORMAT_I2S,
+                .fifo_fmt       = I2S_FIFO_PACKED,
+                .bit_size       = I2S_BIT_SIZE_16,
+                .i2s_bus_width = 32,
+                .dsp_bus_width = 16,
+        },
+        /* For I2S2 */
+        [1] = {
+                .i2s_master     = true,
+                .dma_on         = true,  /* use dma by default */
+                .i2s_master_clk = 8000,
+                .dsp_master_clk = 8000,
+                .i2s_clk_rate   = 2000000,
+                .dap_clk        = "clk_dev1",
+                .audio_sync_clk = "audio_2x",
+                .mode           = I2S_BIT_FORMAT_DSP,
+                .fifo_fmt       = I2S_FIFO_16_LSB,
+                .bit_size       = I2S_BIT_SIZE_16,
+                .i2s_bus_width = 32,
+                .dsp_bus_width = 16,
+        }
+};
+
+static struct tegra_das_platform_data tegra_das_pdata = {
+        .dap_clk = "clk_dev1",
+        .tegra_dap_port_info_table = {
+                /* I2S1 <--> DAC1 <--> DAP1 <--> Hifi Codec */
+                [0] = {
+                        .dac_port = tegra_das_port_i2s1,
+                        .dap_port = tegra_das_port_dap1,
+                        .codec_type = tegra_audio_codec_type_hifi,
+                        .device_property = {
+                                .num_channels = 2,
+                                .bits_per_sample = 16,
+                                .rate = 44100,
+                                .dac_dap_data_comm_format =
+                                                dac_dap_data_format_all,
+                        },
+                },
+                [1] = {
+                        .dac_port = tegra_das_port_none,
+                        .dap_port = tegra_das_port_none,
+                        .codec_type = tegra_audio_codec_type_none,
+                        .device_property = {
+                                .num_channels = 0,
+                                .bits_per_sample = 0,
+                                .rate = 0,
+                                .dac_dap_data_comm_format = 0,
+                        },
+                },
+                [2] = {
+                        .dac_port = tegra_das_port_none,
+                        .dap_port = tegra_das_port_none,
+                        .codec_type = tegra_audio_codec_type_none,
+                        .device_property = {
+                                .num_channels = 0,
+                                .bits_per_sample = 0,
+                                .rate = 0,
+                                .dac_dap_data_comm_format = 0,
+                        },
+                },
+                /* I2S2 <--> DAC2 <--> DAP4 <--> BT SCO Codec */
+                [3] = {
+                        .dac_port = tegra_das_port_i2s2,
+                        .dap_port = tegra_das_port_dap4,
+                        .codec_type = tegra_audio_codec_type_bluetooth,
+                        .device_property = {
+                                .num_channels = 1,
+                                .bits_per_sample = 16,
+                                .rate = 8000,
+                                .dac_dap_data_comm_format =
+                                        dac_dap_data_format_dsp,
+                        },
+                },
+                [4] = {
+                        .dac_port = tegra_das_port_none,
+                        .dap_port = tegra_das_port_none,
+                        .codec_type = tegra_audio_codec_type_none,
+                        .device_property = {
+                                .num_channels = 0,
+                                .bits_per_sample = 0,
+                                .rate = 0,
+                                .dac_dap_data_comm_format = 0,
+                        },
+                },
+        },
+
+        .tegra_das_con_table = {
+                [0] = {
+                        .con_id = tegra_das_port_con_id_hifi,
+                        .num_entries = 2,
+                        .con_line = {
+                                [0] = {tegra_das_port_i2s1, tegra_das_port_dap1, true},
+                                [1] = {tegra_das_port_dap1, tegra_das_port_i2s1, false},
+                        },
+                },
+                [1] = {
+                        .con_id = tegra_das_port_con_id_bt_codec,
+                        .num_entries = 4,
+                        .con_line = {
+                                [0] = {tegra_das_port_i2s2, tegra_das_port_dap4, true},
+                                [1] = {tegra_das_port_dap4, tegra_das_port_i2s2, false},
+                                [2] = {tegra_das_port_i2s1, tegra_das_port_dap1, true},
+                                [3] = {tegra_das_port_dap1, tegra_das_port_i2s1, false},
+                        },
+                },
+        }
+};
 
 static void betelgeuse_i2c_init(void)
 {
+	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(4, &ak8975_device, 1);
+
 	tegra_i2c_device1.dev.platform_data = &betelgeuse_i2c1_platform_data;
 	tegra_i2c_device2.dev.platform_data = &betelgeuse_i2c2_platform_data;
 	tegra_i2c_device3.dev.platform_data = &betelgeuse_i2c3_platform_data;
@@ -226,9 +386,8 @@ static void betelgeuse_i2c_init(void)
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device3);
 	platform_device_register(&tegra_i2c_device4);
-
-	i2c_register_board_info(0, betelgeuse_i2c_bus1_board_info,
-				ARRAY_SIZE(betelgeuse_i2c_bus1_board_info));
+	
+	//i2c_register_board_info(0, betelgeuse_i2c_bus1_board_info, ARRAY_SIZE(betelgeuse_i2c_bus1_board_info));
 }
 
 static struct platform_device *betelgeuse_devices[] __initdata = {
@@ -349,6 +508,7 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
         { "apbdma",     "hclk",         54000000,       true},
         { "audio",      "pll_a_out0",   11289600,       true},
         { "audio_2x",   "audio",        22579200,       false},
+	{ "spdif_out",  "pll_a_out0",   5644800,        false},
         { "uarta",      "clk_m",        12000000,       true},
         { "uartd",      "pll_p",        216000000,      true},
         { "pwm",        "clk_32k",      32768,          true},
@@ -381,6 +541,37 @@ static struct tegra_suspend_platform_data betelgeuse_suspend = {
 	.suspend_mode = TEGRA_SUSPEND_LP0,
 };
 
+static int betelgeuse_ehci_init(void)
+{
+        int gpio_status;
+
+        gpio_status = gpio_request(TEGRA_GPIO_USB1, "VBUS_USB1");
+        if (gpio_status < 0) {
+                pr_err("VBUS_USB1 request GPIO FAILED\n");
+                WARN_ON(1);
+        }
+        tegra_gpio_enable(TEGRA_GPIO_USB1);
+        gpio_status = gpio_direction_output(TEGRA_GPIO_USB1, 1);
+        if (gpio_status < 0) {
+                pr_err("VBUS_USB1 request GPIO DIRECTION FAILED\n");
+                WARN_ON(1);
+        }
+        gpio_set_value(TEGRA_GPIO_USB1, 1);
+	
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata;
+	/*
+        tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+        tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+        tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
+        platform_device_register(&tegra_ehci1_device);
+        platform_device_register(&tegra_ehci2_device);
+        platform_device_register(&tegra_ehci3_device);
+	*/
+
+        return 0;
+}
+
 static void __init tegra_betelgeuse_init(void)
 {
 	tegra_common_init();
@@ -391,9 +582,13 @@ static void __init tegra_betelgeuse_init(void)
 
 	betelgeuse_pinmux_init();
 
-	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata;
+	betelgeuse_ehci_init();
 
-	tegra_i2s_device1.dev.platform_data = &tegra_audio_pdata;
+	//tegra_i2s_device1.dev.platform_data = &tegra_audio_pdata;
+	tegra_i2s_device1.dev.platform_data = &tegra_audio_pdata[0];
+        tegra_i2s_device2.dev.platform_data = &tegra_audio_pdata[1];
+        tegra_spdif_device.dev.platform_data = &tegra_spdif_pdata;
+	tegra_das_device.dev.platform_data = &tegra_das_pdata;
 
 	platform_add_devices(betelgeuse_devices, ARRAY_SIZE(betelgeuse_devices));
 
