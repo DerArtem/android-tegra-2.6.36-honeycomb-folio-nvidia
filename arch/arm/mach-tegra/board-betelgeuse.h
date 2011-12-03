@@ -23,24 +23,4 @@ int betelgeuse_power_init(void);
 int betelgeuse_panel_init(void);
 int betelgeuse_sdhci_init(void);
 
-/* TPS6586X gpios */
-#define TPS6586X_GPIO_BASE      TEGRA_NR_GPIOS
-#define AVDD_DSI_CSI_ENB_GPIO   (TPS6586X_GPIO_BASE + 1) /* gpio2 */
-
-/* WM8903 gpios */
-#define WM8903_GPIO_BASE        (TEGRA_NR_GPIOS + 32)
-#define WM8903_GP1              (WM8903_GPIO_BASE + 0)
-#define WM8903_GP2              (WM8903_GPIO_BASE + 1)
-#define WM8903_GP3              (WM8903_GPIO_BASE + 2)
-#define WM8903_GP4              (WM8903_GPIO_BASE + 3)
-#define WM8903_GP5              (WM8903_GPIO_BASE + 4)
-
-/* Interrupt numbers from external peripherals */
-#define TPS6586X_INT_BASE       TEGRA_NR_IRQS
-#define TPS6586X_INT_END        (TPS6586X_INT_BASE + 32)
-
-#define TEGRA_GPIO_USB1		TEGRA_GPIO_PU3
-#define TEGRA_GPIO_MAGNETOMETER	TEGRA_GPIO_PV1
-#define TEGRA_GPIO_CDC_IRQ	TEGRA_GPIO_PW2
-
 #endif
