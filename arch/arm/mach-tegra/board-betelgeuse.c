@@ -16,6 +16,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/serial_8250.h>
@@ -403,16 +404,20 @@ static struct platform_device *betelgeuse_devices[] __initdata = {
 	&tegra_spi_device4,
 	&tegra_gart_device,
 	&tegra_i2s_device1,
+	&tegra_avp_device,
 };
 
 static void __init tegra_betelgeuse_fixup(struct machine_desc *desc,
 	struct tag *tags, char **cmdline, struct meminfo *mi)
 {
-	mi->nr_banks = 2;
-	mi->bank[0].start = PHYS_OFFSET;
-	mi->bank[0].size = 448 * SZ_1M;
-	mi->bank[1].start = SZ_512M;
-	mi->bank[1].size = SZ_512M;
+	mi->nr_banks = 1;
+	//mi->bank[0].start = PHYS_OFFSET;
+	//mi->bank[0].size = 448 * SZ_1M;
+	mi->bank[0].size  = SHUTTLE_MEM_SIZE;
+	mi->bank[0].size  = SHUTTLE_MEM_SIZE - SHUTTLE_GPU_MEM_SIZE;
+	
+	//mi->bank[1].start = SZ_512M;
+	//mi->bank[1].size = SZ_512M;
 }
 
 static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
@@ -505,6 +510,11 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
 	{ "kbc",	"clk_32k",	32768,		true},
 	{ NULL,		NULL,		0,		0},
 	*/
+
+	{ "clk_32k",    NULL,           32768,          true}, /* always on */
+	{ "clk_m",      NULL,           0,		true}, /* must be always on - Frequency will be autodetected */
+	{ "pll_s",      "clk_32k",      12000000,       true},
+
         { "apbdma",     "hclk",         54000000,       true},
         { "audio",      "pll_a_out0",   11289600,       true},
         { "audio_2x",   "audio",        22579200,       false},
@@ -517,9 +527,26 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
         { "pll_a_out0", "pll_a",        11289600,       true},
         { "i2s1",       "pll_a_out0",   11289600,       false},
         { "i2s2",       "pll_a_out0",   11289600,       false},
+
+	/* pll_c is used as graphics clock and system clock */
         { "pll_c",      "clk_m",        600000000,      true},
         { "pll_c_out1", "pll_c",        240000000,      true},
-        { "pll_p_out4", "pll_p",        24000000,       true},
+
+	/* pll_p is used as system clock - and for ulpi */
+        { "pll_p",      "clk_m",        216000000,      true},          /* must be always on */
+	{ "pll_p_out1", "pll_p",        28800000,       true},          /* must be always on - audio clocks ...*/
+	{ "pll_p_out2", "pll_p",        108000000,      true},  /* must be always on */
+	{ "pll_p_out3", "pll_p",        72000000,       true},  /* must be always on - i2c, camera */
+	{ "pll_p_out4", "pll_p",        26000000,       true},  /* must be always on - USB ulpi */
+        //{ "pll_p_out4", "pll_p",        24000000,       true},
+	//
+
+	/* pll_m is used as memory clock - bootloader also uses it this way */
+	{ "pll_m",      "clk_m",        666000000,      true},          /* always on - memory clocks */
+	{ "pll_m_out1", "pll_m",        222000000,      true},          /* always on - unused ?*/
+	{ "emc",        "pll_m",        333000000,      true},          /* always on */
+
+
         { "i2c1_i2c",   "pll_p_out3",   72000000,       true},
         { "i2c2_i2c",   "pll_p_out3",   72000000,       true},
         { "i2c3_i2c",   "pll_p_out3",   72000000,       true},
@@ -527,6 +554,12 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
         { "i2c1",       "clk_m",        3000000,        false},
         { "i2c2",       "clk_m",        3000000,        false},
         { "i2c3",       "clk_m",        3000000,        false},
+	{ "sclk",       "pll_p_out2",   108000000,      true},          /* must be always on */
+	{ "avp.sclk",   "sclk",		108000000,      false},
+	{ "vcp",        "clk_m",        12000000,       false},
+        { "bsea",       "clk_m",        12000000,       false},
+	{ "vde",        "pll_p",        28800000,       false},
+	{ "kbc",        "clk_32k",      32768,          false},         /* tegra-kbc */
         { NULL,         NULL,           0,              0},
 };
 

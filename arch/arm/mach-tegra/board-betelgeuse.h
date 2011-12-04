@@ -43,4 +43,10 @@ int betelgeuse_sdhci_init(void);
 #define TEGRA_GPIO_MAGNETOMETER	TEGRA_GPIO_PV1
 #define TEGRA_GPIO_CDC_IRQ	TEGRA_GPIO_PW2
 
+#define SHUTTLE_FB_PAGES        2			/* At least, 2 video pages */
+#define SHUTTLE_FB_HDMI_PAGES   2			/* At least, 2 video pages for HDMI */
+
+#define SHUTTLE_MEM_SIZE	SZ_512M			/* Total memory */
+#define SHUTTLE_GPU_MEM_SIZE	SZ_128M			/* Memory reserved for GPU */
+
 #endif

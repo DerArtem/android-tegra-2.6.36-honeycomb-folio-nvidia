@@ -35,6 +35,7 @@
 
 #include "devices.h"
 #include "gpio-names.h"
+#include "board-betelgeuse.h"
 
 #define betelgeuse_bl_enb		TEGRA_GPIO_PB5
 #define betelgeuse_lvds_shutdown	TEGRA_GPIO_PB2
@@ -42,6 +43,21 @@
 #define betelgeuse_bl_vdd		TEGRA_GPIO_PW0
 #define betelgeuse_bl_pwm		TEGRA_GPIO_PB4
 #define betelgeuse_hdmi_hpd        	TEGRA_GPIO_PN7
+
+/* Estimate memory layout for GPU */
+//#define TEGRA_ROUND_ALLOC(x) (((x) + 4095) & ((unsigned)(-4096)))
+//#define SHUTTLE_FB_SIZE TEGRA_ROUND_ALLOC(1024*600*(16/8)*SHUTTLE_FB_PAGES)
+/* Frame buffer size assuming 16bpp color and 2 pages for page flipping */
+//#define SHUTTLE_FB_HDMI_SIZE TEGRA_ROUND_ALLOC(1920*1080*(16/8)*SHUTTLE_FB_PAGES)
+
+#define SHUTTLE_FB_SIZE SZ_8M
+#define SHUTTLE_FB_HDMI_SIZE SZ_8M
+
+#define SHUTTLE_GPU_MEM_START   (SHUTTLE_MEM_SIZE - SHUTTLE_GPU_MEM_SIZE)
+#define SHUTTLE_FB_BASE         (SHUTTLE_GPU_MEM_START)
+#define SHUTTLE_FB_HDMI_BASE    (SHUTTLE_GPU_MEM_START + SHUTTLE_FB_SIZE)
+#define SHUTTLE_CARVEOUT_BASE   (SHUTTLE_GPU_MEM_START + SHUTTLE_FB_SIZE + SHUTTLE_FB_HDMI_SIZE)
+#define SHUTTLE_CARVEOUT_SIZE   (SHUTTLE_MEM_SIZE - SHUTTLE_CARVEOUT_BASE)
 
 static int betelgeuse_backlight_init(struct device *dev)
 {
@@ -132,8 +148,10 @@ static struct resource betelgeuse_disp1_resources[] = {
 	},
 	{
 		.name	= "fbmem",
-		.start	= 0x1c012000,
-		.end    = 0x1c012000 + 0x258000 - 1,   /* 2.4 MB @ 448 MB */
+		//.start	= 0x1c012000,
+		.start  = SHUTTLE_FB_BASE,
+		.end    = SHUTTLE_FB_BASE + SHUTTLE_FB_SIZE - 1,
+		//.end    = 0x1c012000 + 0x258000 - 1,   /* 2.4 MB @ 448 MB */
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -154,8 +172,10 @@ static struct resource betelgeuse_disp2_resources[] = {
         {
                 .name   = "fbmem",
                 .flags  = IORESOURCE_MEM,
-		.start  = 0x1c26A000,
-		.end    = 0x1c26A000 + 0x500000 - 1,  /* 5 MB */
+		.start  = SHUTTLE_FB_HDMI_BASE,
+		.end    = SHUTTLE_FB_HDMI_BASE + SHUTTLE_FB_HDMI_SIZE - 1,
+		//.start  = 0x1c26A000,
+		//.end    = 0x1c26A000 + 0x500000 - 1,  /* 5 MB */
         },
         {
                 .name   = "hdmi_regs",
@@ -197,7 +217,9 @@ static struct tegra_dc_mode betelgeuse_panel_modes[] = {
                 .v_front_porch = 4,
         },
 };
+*/
 
+/*
 static struct tegra_dc_mode betelgeuse_panel_modes[] = {
         {
                 .pclk = 72072000,
@@ -240,8 +262,8 @@ static struct tegra_fb_data betelgeuse_fb_data = {
 
 static struct tegra_fb_data betelgeuse_hdmi_fb_data = {
         .win            = 0,
-        .xres           = 1024 ,
-        .yres           = 600,
+        .xres           = 1920 ,
+        .yres           = 1080,
         .bits_per_pixel = 16,
 };
 
@@ -250,6 +272,9 @@ static struct tegra_dc_out betelgeuse_disp1_out = {
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
+
+	.height		= 136, /* mm */
+	.width		= 217, /* mm */
 
 	.modes		= betelgeuse_panel_modes,
 	.n_modes	= ARRAY_SIZE(betelgeuse_panel_modes),
@@ -291,6 +316,7 @@ static struct tegra_dc_out betelgeuse_disp2_out = {
 
 static struct tegra_dc_platform_data betelgeuse_disp1_pdata = {
 	.flags		= TEGRA_DC_FLAG_ENABLED,
+	.emc_clk_rate	= 300000000,
 	.default_out	= &betelgeuse_disp1_out,
 	.fb		= &betelgeuse_fb_data,
 };
@@ -351,8 +377,10 @@ static struct nvmap_platform_carveout betelgeuse_carveouts[] = {
         [1] = {
                 .name           = "generic-0",
                 .usage_mask     = NVMAP_HEAP_CARVEOUT_GENERIC,
-                .base           = 0x1C000000,   /* carveout starts at 448 */
-                .size           = SZ_64M - 0xC00000,
+                //.base           = 0x1C000000,   /* carveout starts at 448 */
+		.base		= SHUTTLE_CARVEOUT_BASE,
+		.size		= SHUTTLE_CARVEOUT_SIZE,
+                //.size           = SZ_64M - 0xC00000,
                 .buddy_size     = SZ_32K,
         },
 };
