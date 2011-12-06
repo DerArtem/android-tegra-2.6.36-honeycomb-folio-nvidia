@@ -69,15 +69,16 @@
 #define ATAG_NVIDIA_PRESERVED_MEM_N	2
 #define ATAG_NVIDIA_FORCE_32		0x7fffffff
 
-static char *usb_functions[] = { "mtp" };
-static char *usb_functions_adb[] = { "mtp", "adb" };
+//static char *usb_functions[] = { "mtp" };
+//static char *usb_functions_adb[] = { "acm", "mtp", "adb" };
+static char *usb_functions_adb[] = { "usb_mass_storage", "adb", "acm" };
 
 static struct android_usb_product usb_products[] = {
-        {
-                .product_id     = 0x7102,
-                .num_functions  = ARRAY_SIZE(usb_functions),
-                .functions      = usb_functions,
-        },
+//        {
+//                .product_id     = 0x7102,
+//                .num_functions  = ARRAY_SIZE(usb_functions),
+//                .functions      = usb_functions,
+//        },
         {
                 .product_id     = 0x7100,
                 .num_functions  = ARRAY_SIZE(usb_functions_adb),
@@ -422,7 +423,7 @@ static void __init tegra_betelgeuse_fixup(struct machine_desc *desc,
 
 static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
 	/* name		parent		rate		enabled */
-	/*
+/*
 	{ "clk_dev1",	NULL,		26000000,	true},
 	{ "clk_m",	NULL,		12000000,	true},
 	{ "3d",		"pll_m",	266400000,	true},
@@ -509,10 +510,10 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
 	{ "rtc",	"clk_32k",	32768,		true},
 	{ "kbc",	"clk_32k",	32768,		true},
 	{ NULL,		NULL,		0,		0},
-	*/
+*/
 
-	{ "clk_32k",    NULL,           32768,          true}, /* always on */
-	{ "clk_m",      NULL,           0,		true}, /* must be always on - Frequency will be autodetected */
+	{ "clk_32k",    NULL,           32768,          true}, // always on
+	{ "clk_m",      NULL,           0,		true}, // must be always on - Frequency will be autodetected
 	{ "pll_s",      "clk_32k",      12000000,       true},
 
         { "apbdma",     "hclk",         54000000,       true},
@@ -528,23 +529,23 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
         { "i2s1",       "pll_a_out0",   11289600,       false},
         { "i2s2",       "pll_a_out0",   11289600,       false},
 
-	/* pll_c is used as graphics clock and system clock */
+	// pll_c is used as graphics clock and system clock
         { "pll_c",      "clk_m",        600000000,      true},
         { "pll_c_out1", "pll_c",        240000000,      true},
 
-	/* pll_p is used as system clock - and for ulpi */
-        { "pll_p",      "clk_m",        216000000,      true},          /* must be always on */
-	{ "pll_p_out1", "pll_p",        28800000,       true},          /* must be always on - audio clocks ...*/
-	{ "pll_p_out2", "pll_p",        108000000,      true},  /* must be always on */
-	{ "pll_p_out3", "pll_p",        72000000,       true},  /* must be always on - i2c, camera */
-	{ "pll_p_out4", "pll_p",        26000000,       true},  /* must be always on - USB ulpi */
+	// pll_p is used as system clock - and for ulpi
+        { "pll_p",      "clk_m",        216000000,      true},          // must be always on
+	{ "pll_p_out1", "pll_p",        28800000,       true},          // must be always on - audio clocks ...
+	{ "pll_p_out2", "pll_p",        108000000,      true},  // must be always on
+	{ "pll_p_out3", "pll_p",        72000000,       true},  // must be always on - i2c, camera
+	{ "pll_p_out4", "pll_p",        26000000,       true},  // must be always on - USB ulpi
         //{ "pll_p_out4", "pll_p",        24000000,       true},
 	//
 
-	/* pll_m is used as memory clock - bootloader also uses it this way */
-	{ "pll_m",      "clk_m",        666000000,      true},          /* always on - memory clocks */
-	{ "pll_m_out1", "pll_m",        222000000,      true},          /* always on - unused ?*/
-	{ "emc",        "pll_m",        333000000,      true},          /* always on */
+	// pll_m is used as memory clock - bootloader also uses it this way
+	{ "pll_m",      "clk_m",        666000000,      true},          // always on - memory clocks
+	{ "pll_m_out1", "pll_m",        222000000,      true},          // always on - unused ?
+	{ "emc",        "pll_m",        333000000,      true},          // always on
 
 
         { "i2c1_i2c",   "pll_p_out3",   72000000,       true},
@@ -554,12 +555,12 @@ static __initdata struct tegra_clk_init_table betelgeuse_clk_init_table[] = {
         { "i2c1",       "clk_m",        3000000,        false},
         { "i2c2",       "clk_m",        3000000,        false},
         { "i2c3",       "clk_m",        3000000,        false},
-	{ "sclk",       "pll_p_out2",   108000000,      true},          /* must be always on */
+	{ "sclk",       "pll_p_out2",   108000000,      true},          // must be always on
 	{ "avp.sclk",   "sclk",		108000000,      false},
 	{ "vcp",        "clk_m",        12000000,       false},
         { "bsea",       "clk_m",        12000000,       false},
 	{ "vde",        "pll_p",        28800000,       false},
-	{ "kbc",        "clk_32k",      32768,          false},         /* tegra-kbc */
+	{ "kbc",        "clk_32k",      32768,          false},         // tegra-kbc
         { NULL,         NULL,           0,              0},
 };
 
@@ -608,6 +609,7 @@ static int betelgeuse_ehci_init(void)
 static void __init tegra_betelgeuse_init(void)
 {
 	tegra_common_init();
+	betelgeuse_emc_init();
 
 	tegra_init_suspend(&betelgeuse_suspend);
 

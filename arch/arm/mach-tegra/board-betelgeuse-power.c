@@ -87,7 +87,9 @@ static struct regulator_consumer_supply tps658621_ldo4_supply[] = {
 };
 
 static struct regulator_consumer_supply tps658621_ldo6_supply[] = {
+	REGULATOR_SUPPLY("vddio vdac", NULL),
 	REGULATOR_SUPPLY("avdd_vdac", NULL),
+	REGULATOR_SUPPLY("vmic", "soc-audio"),
 };
 static struct regulator_consumer_supply tps658621_ldo7_supply[] = {
 	REGULATOR_SUPPLY("avdd_hdmi", NULL),

@@ -22,6 +22,7 @@ void betelgeuse_pinmux_init(void);
 int betelgeuse_power_init(void);
 int betelgeuse_panel_init(void);
 int betelgeuse_sdhci_init(void);
+void betelgeuse_emc_init(void);
 
 /* TPS6586X gpios */
 #define TPS6586X_GPIO_BASE      TEGRA_NR_GPIOS
